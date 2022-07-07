@@ -2,10 +2,6 @@ package com.orgzly.android.ui.main
 
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import com.orgzly.android.App
-import com.orgzly.android.usecase.NoteUpdateClockingState
-import com.orgzly.android.usecase.UseCase
-import com.orgzly.android.usecase.UseCaseRunner
 
 class SharedMainActivityViewModel : ViewModel() {
     val drawerLockState: MutableLiveData<Boolean> = MutableLiveData()
@@ -26,20 +22,6 @@ class SharedMainActivityViewModel : ViewModel() {
             subTitle: CharSequence?,
             selectionCount: Int) {
         fragmentState.value = FragmentState(tag, title, subTitle, selectionCount)
-    }
-
-    fun run(action: UseCase?) {
-        App.EXECUTORS.diskIO().execute {
-            try {
-                UseCaseRunner.run(action!!)
-            } catch (e: Throwable) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    fun clockingUpdateRequest(noteIds: Set<Long>, type: Int) {
-        run(NoteUpdateClockingState(noteIds, type))
     }
 
     data class FragmentState(
