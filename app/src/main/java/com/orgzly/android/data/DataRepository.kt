@@ -224,6 +224,10 @@ class DataRepository @Inject constructor(
         }
     }
 
+    fun getBooksWithError(): List<Book> {
+        return db.book().getWithActionType(BookAction.Type.ERROR)
+    }
+
     fun getBookView(name: String): BookView? {
         return db.bookView().get(name)
     }
@@ -415,7 +419,8 @@ class DataRepository @Inject constructor(
                 System.currentTimeMillis(),
                 status)
 
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, "Updating status for $bookId: $updated")
+        if (BuildConfig.LOG_DEBUG)
+            LogUtils.d(TAG, "Updating book $bookId status to $status ($updated updated)")
     }
 
     fun updateBookLinkAndSync(bookId: Long, uploadedBook: VersionedRook) {
@@ -456,16 +461,25 @@ class DataRepository @Inject constructor(
     @Throws(IOException::class)
     fun getTargetBook(context: Context): BookView {
         val books = getBooks()
+
         val defaultBookName = AppPreferences.shareNotebook(context)
 
         if (books.isEmpty()) {
+            if (BuildConfig.LOG_DEBUG)
+                LogUtils.d(TAG, "No existing books found, creating new \"$defaultBookName\" book")
             return createBook(defaultBookName)
+
         } else {
             for (book in books) {
                 if (defaultBookName == book.book.name) {
+                    if (BuildConfig.LOG_DEBUG)
+                        LogUtils.d(TAG, "Found book that matches default book name \"$defaultBookName\"")
                     return book
                 }
             }
+
+            if (BuildConfig.LOG_DEBUG)
+                LogUtils.d(TAG, "No existing books found to match default book name \"$defaultBookName\", using the first book")
             return books.first()
         }
     }
@@ -977,24 +991,29 @@ class DataRepository @Inject constructor(
     }
 
     fun setNotesClockingState(noteIds: Set<Long>, type: Int) {
+        var contentUpdated = false
 
-        noteIds.forEach() { noteId ->
+        noteIds.forEach { noteId ->
             val content = db.note().get(noteId)?.content
 
-            if (type == 0) {
-                val newContent = OrgFormatter.clockIn(content)
-                db.note().updateContent(noteId, newContent)
-            } else if (type == 1) {
-                val newContent = OrgFormatter.clockOut(content)
-                db.note().updateContent(noteId, newContent)
-            } else if (type == 2) {
-                val newContent = OrgFormatter.clockCancel(content)
-                db.note().updateContent(noteId, newContent)
+            val newContent = when (type) {
+                0 -> OrgFormatter.clockIn(content)
+                1 -> OrgFormatter.clockOut(content)
+                2 -> OrgFormatter.clockCancel(content)
+                else -> content
+            }
+
+            if (newContent !== content) {
+                val contentLineCount = MiscUtils.lineCount(newContent)
+                db.note().updateContent(noteId, newContent, contentLineCount)
+                contentUpdated = true
             }
         }
 
-        db.note().get(noteIds).mapTo(hashSetOf()) { it.position.bookId }.let {
-            updateBookIsModified(it, true)
+        if (contentUpdated) {
+            db.note().get(noteIds).mapTo(hashSetOf()) { it.position.bookId }.let {
+                updateBookIsModified(it, true)
+            }
         }
     }
 
@@ -1103,13 +1122,14 @@ class DataRepository @Inject constructor(
                     }
 
                     updated += db.note().update(
-                            note.noteId,
-                            title,
-                            content,
-                            scl.state,
-                            getOrgRangeId(scl.scheduled),
-                            getOrgRangeId(scl.deadline),
-                            getOrgRangeId(scl.closed))
+                        note.noteId,
+                        title,
+                        content,
+                        MiscUtils.lineCount(content),
+                        scl.state,
+                        getOrgRangeId(scl.scheduled),
+                        getOrgRangeId(scl.deadline),
+                        getOrgRangeId(scl.closed))
 
                     if (scl.isShifted) {
                         replaceNoteEvents(note.noteId, title, content)
@@ -1126,7 +1146,7 @@ class DataRepository @Inject constructor(
 
     fun updateNoteContent(bookId: Long, noteId: Long, content: String?) {
         db.runInTransaction {
-            db.note().updateContent(noteId, content)
+            db.note().updateContent(noteId, content, MiscUtils.lineCount(content))
 
             updateBookIsModified(bookId, true)
         }
@@ -1915,7 +1935,7 @@ class DataRepository @Inject constructor(
     }
 
     fun findNoteHavingProperty(name: String, value: String): NoteDao.NoteIdBookId? {
-        return db.note().firstNoteHavingPropertyLowerCase(name.toLowerCase(), value.toLowerCase())
+        return db.note().firstNoteHavingPropertyLowerCase(name.lowercase(), value.lowercase())
     }
 
     /*
@@ -1977,12 +1997,12 @@ class DataRepository @Inject constructor(
         }
     }
 
-    fun exportSavedSearches() {
-        FileSavedSearchStore(context, this).exportSearches()
+    fun exportSavedSearches(uri: Uri?): Int {
+        return FileSavedSearchStore(context, this).exportSearches(uri)
     }
 
-    fun importSavedSearches(uri: Uri) {
-        FileSavedSearchStore(context, this).importSearches(uri)
+    fun importSavedSearches(uri: Uri): Int {
+        return FileSavedSearchStore(context, this).importSearches(uri)
     }
 
 
@@ -2277,10 +2297,25 @@ class DataRepository @Inject constructor(
      * Recalculate timestamps after time zone change.
      */
     fun updateTimestamps() {
+        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
+
         db.orgTimestamp().getAll().forEach {
             val timestamp = OrgDateTime.doParse(it.string).calendar.timeInMillis
             db.orgTimestamp().update(it.copy(timestamp = timestamp))
         }
+    }
+
+    fun getSyncRepos(): List<SyncRepo> {
+        val list = ArrayList<SyncRepo>()
+        for ((id, type, url) in getRepos()) {
+            try {
+                list.add(getRepoInstance(id, type, url))
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+        }
+        return list
     }
 
     fun getRepoInstance(id: Long, type: RepoType, url: String): SyncRepo {
@@ -2294,6 +2329,15 @@ class DataRepository @Inject constructor(
 
     fun getRepoPropsMap(id: Long): Map<String, String> {
         return AppPreferences.repoPropsMap(context, id)
+    }
+
+    fun updateBooksStatusToCanceled() {
+        db.book().updateStatusToCanceled(
+            BookAction.Type.PROGRESS,
+            BookAction.Type.INFO,
+            context.getString(R.string.canceled),
+            System.currentTimeMillis(),
+            null)
     }
 
     companion object {

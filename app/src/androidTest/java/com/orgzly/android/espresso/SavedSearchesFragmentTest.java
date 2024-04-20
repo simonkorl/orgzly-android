@@ -1,14 +1,5 @@
 package com.orgzly.android.espresso;
 
-import androidx.test.core.app.ActivityScenario;
-
-import com.orgzly.R;
-import com.orgzly.android.OrgzlyTest;
-import com.orgzly.android.ui.main.MainActivity;
-
-import org.junit.Before;
-import org.junit.Test;
-
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
@@ -17,16 +8,36 @@ import static androidx.test.espresso.action.ViewActions.typeText;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.contrib.DrawerActions.open;
+import static androidx.test.espresso.intent.Intents.intending;
+import static androidx.test.espresso.intent.matcher.IntentMatchers.hasAction;
 import static androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
-import static com.orgzly.android.espresso.EspressoUtils.onActionItemClick;
-import static com.orgzly.android.espresso.EspressoUtils.onSavedSearch;
-import static com.orgzly.android.espresso.EspressoUtils.onSnackbar;
-import static com.orgzly.android.espresso.EspressoUtils.openContextualToolbarOverflowMenu;
-import static com.orgzly.android.espresso.EspressoUtils.replaceTextCloseKeyboard;
+import static com.orgzly.android.espresso.util.EspressoUtils.contextualToolbarOverflowMenu;
+import static com.orgzly.android.espresso.util.EspressoUtils.onActionItemClick;
+import static com.orgzly.android.espresso.util.EspressoUtils.onSavedSearch;
+import static com.orgzly.android.espresso.util.EspressoUtils.onSnackbar;
+import static com.orgzly.android.espresso.util.EspressoUtils.replaceTextCloseKeyboard;
 import static org.hamcrest.Matchers.allOf;
+
+import android.app.Activity;
+import android.app.Instrumentation;
+import android.content.Intent;
+
+import androidx.documentfile.provider.DocumentFile;
+import androidx.test.core.app.ActivityScenario;
+import androidx.test.espresso.intent.Intents;
+
+import com.orgzly.R;
+import com.orgzly.android.LocalStorage;
+import com.orgzly.android.OrgzlyTest;
+import com.orgzly.android.ui.main.MainActivity;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import java.io.IOException;
 
 public class SavedSearchesFragmentTest extends OrgzlyTest {
     @Before
@@ -48,13 +59,13 @@ public class SavedSearchesFragmentTest extends OrgzlyTest {
 
         onView(withId(R.id.fragment_saved_search_name)).perform(replaceTextCloseKeyboard("Scheduled"));
         onView(withId(R.id.fragment_saved_search_query)).perform(replaceTextCloseKeyboard("s.done"));
-        onView(withId(R.id.done)).perform(click());
+        onView(withId(R.id.done)).perform(click()); // Saved search done
         onView(withText(R.string.filter_name_already_exists)).check(matches(isDisplayed()));
         onView(withId(R.id.fragment_saved_search_flipper)).check(matches(isDisplayed()));
 
         onView(withId(R.id.fragment_saved_search_name)).perform(replaceTextCloseKeyboard("SCHEDULED"));
         onView(withId(R.id.fragment_saved_search_query)).perform(replaceTextCloseKeyboard("s.done"));
-        onView(withId(R.id.done)).perform(click());
+        onView(withId(R.id.done)).perform(click()); // Saved search done
         onView(withText(R.string.filter_name_already_exists)).check(matches(isDisplayed()));
         onView(withId(R.id.fragment_saved_search_flipper)).check(matches(isDisplayed()));
     }
@@ -65,7 +76,7 @@ public class SavedSearchesFragmentTest extends OrgzlyTest {
         onSavedSearch(0).perform(click());
         onView(withId(R.id.fragment_saved_search_flipper)).check(matches(isDisplayed()));
         onView(withId(R.id.fragment_saved_search_query)).perform(typeText(" edited"));
-        onView(withId(R.id.done)).perform(click());
+        onView(withId(R.id.done)).perform(click()); // Saved search done
         onView(withId(R.id.fragment_saved_searches_flipper)).check(matches(isDisplayed()));
     }
 
@@ -82,7 +93,7 @@ public class SavedSearchesFragmentTest extends OrgzlyTest {
         onView(withId(R.id.fragment_saved_searches_flipper)).check(matches(isDisplayed()));
 
         onSavedSearch(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.delete)).perform(click());
 
         pressBack();
@@ -106,9 +117,24 @@ public class SavedSearchesFragmentTest extends OrgzlyTest {
     }
 
     @Test
-    public void testExportSavedSearches() {
+    public void testExportSavedSearches() throws IOException {
+        Intents.init();
+
+        // Uri to get back after sending Intent.ACTION_CREATE_DOCUMENT
+        DocumentFile file = DocumentFile.fromFile(
+                new LocalStorage(context).downloadsDirectory("searches.json"));
+        Instrumentation.ActivityResult result = new Instrumentation.ActivityResult(
+                Activity.RESULT_OK, new Intent().setData(file.getUri()));
+
+        intending(hasAction(Intent.ACTION_CREATE_DOCUMENT)).respondWith(result);
+
         onActionItemClick(R.id.saved_searches_export, R.string.export);
+
         onSnackbar().check(matches(withText(
                 context.getResources().getQuantityString(R.plurals.exported_searches, 4, 4))));
+
+        Intents.release();
+
+        file.delete();
     }
 }

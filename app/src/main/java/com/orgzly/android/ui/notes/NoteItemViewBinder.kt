@@ -2,7 +2,6 @@ package com.orgzly.android.ui.notes
 
 import android.content.Context
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
@@ -13,7 +12,6 @@ import com.orgzly.android.App
 import com.orgzly.android.db.entity.Note
 import com.orgzly.android.db.entity.NoteView
 import com.orgzly.android.prefs.AppPreferences
-import com.orgzly.android.ui.ImageLoader
 import com.orgzly.android.ui.TimeType
 import com.orgzly.android.ui.util.TitleGenerator
 import com.orgzly.android.ui.util.styledAttributes
@@ -26,19 +24,17 @@ import com.orgzly.databinding.ItemAgendaDividerBinding
 import com.orgzly.databinding.ItemHeadBinding
 
 class NoteItemViewBinder(private val context: Context, private val inBook: Boolean) {
-    private val attrs: Attrs
+    private val attrs: Attrs = Attrs.obtain(context)
 
     private val titleGenerator: TitleGenerator
 
     private val userTimeFormatter: UserTimeFormatter
 
     init {
-        attrs = Attrs.obtain(context)
 
         val titleAttributes = TitleGenerator.TitleAttributes(
                 attrs.todoColor,
                 attrs.doneColor,
-                attrs.unknownColor,
                 attrs.postTitleTextSize,
                 attrs.postTitleTextColor)
 
@@ -48,22 +44,14 @@ class NoteItemViewBinder(private val context: Context, private val inBook: Boole
     }
 
     fun bind(holder: NoteItemViewHolder, noteView: NoteView, agendaTimeType: TimeType? = null) {
-
         setupTitle(holder, noteView)
-
         setupBookName(holder, noteView)
-
         setupPlanningTimes(holder, noteView, agendaTimeType)
-
         setupContent(holder, noteView.note)
-
         setupIndent(holder, noteView.note)
-
         setupBullet(holder, noteView.note)
-
         setupFoldingButtons(holder, noteView.note)
-
-        setupAlpha(holder, noteView.note)
+        setupAlpha(holder, noteView)
     }
 
     private fun setupBookName(holder: NoteItemViewHolder, noteView: NoteView) {
@@ -101,7 +89,7 @@ class NoteItemViewBinder(private val context: Context, private val inBook: Boole
     }
 
     private fun setupTitle(holder: NoteItemViewHolder, noteView: NoteView) {
-        holder.binding.itemHeadTitle.text = generateTitle(noteView)
+        holder.binding.itemHeadTitle.setVisibleText(generateTitle(noteView))
     }
 
     fun generateTitle(noteView: NoteView): CharSequence {
@@ -109,30 +97,21 @@ class NoteItemViewBinder(private val context: Context, private val inBook: Boole
     }
 
     private fun setupContent(holder: NoteItemViewHolder, note: Note) {
-        holder.binding.itemHeadContent.text = note.content
-
         if (note.hasContent() && titleGenerator.shouldDisplayContent(note)) {
             if (AppPreferences.isFontMonospaced(context)) {
-                holder.binding.itemHeadContent.typeface = Typeface.MONOSPACE
+                holder.binding.itemHeadContent.setTypeface(Typeface.MONOSPACE)
             }
 
-            holder.binding.itemHeadContent.setRawText(note.content as CharSequence)
+            holder.binding.itemHeadContent.setSourceText(note.content)
 
             /* If content changes (for example by toggling the checkbox), update the note. */
-            holder.binding.itemHeadContent.onUserTextChangeListener = Runnable {
-                if (holder.binding.itemHeadContent.getRawText() != null) {
-                    val useCase = NoteUpdateContent(
-                            note.position.bookId,
-                            note.id,
-                            holder.binding.itemHeadContent.getRawText()?.toString())
+            holder.binding.itemHeadContent.setOnUserTextChangeListener { str ->
+                val useCase = NoteUpdateContent(note.position.bookId, note.id, str)
 
-                    App.EXECUTORS.diskIO().execute {
-                        UseCaseRunner.run(useCase)
-                    }
+                App.EXECUTORS.diskIO().execute {
+                    UseCaseRunner.run(useCase)
                 }
             }
-
-            ImageLoader.loadImages(holder.binding.itemHeadContent)
 
             holder.binding.itemHeadContent.visibility = View.VISIBLE
 
@@ -199,14 +178,40 @@ class NoteItemViewBinder(private val context: Context, private val inBook: Boole
                 noteView.closedRangeString)
     }
 
-    /** Set alpha for done items. */
-    private fun setupAlpha(holder: NoteItemViewHolder, note: Note) {
-        holder.binding.alpha =
-                if (note.state != null && AppPreferences.doneKeywordsSet(context).contains(note.state)) {
-                    0.45f
-                } else {
-                    1.0f
-                }
+    /** Set alpha for done and archived items. */
+    private fun setupAlpha(holder: NoteItemViewHolder, noteView: NoteView) {
+        val state = noteView.note.state
+        val tags = noteView.note.getTagsList()
+        val inheritedTags = noteView.getInheritedTagsList()
+
+        val isDone = state != null && AppPreferences.doneKeywordsSet(context).contains(state)
+        val isArchived = tags.contains(ARCHIVE_TAG) || inheritedTags.contains(ARCHIVE_TAG)
+
+        val alphaValue = if (isDone || isArchived) {
+            0.45f
+        } else {
+            1.0f
+        }
+
+        holder.binding.run {
+            listOf(
+                itemHeadTitle,
+                itemHeadBookNameIcon,
+                itemHeadBookNameText,
+                itemHeadBookNameBeforeNoteText,
+                itemHeadScheduledIcon,
+                itemHeadScheduledText,
+                itemHeadDeadlineIcon,
+                itemHeadDeadlineText,
+                itemHeadEventIcon,
+                itemHeadEventText,
+                itemHeadClosedText,
+                itemHeadClosedIcon,
+                itemHeadContent
+            ).forEach {
+                it.alpha = alphaValue
+            }
+        }
     }
 
     /**
@@ -255,22 +260,23 @@ class NoteItemViewBinder(private val context: Context, private val inBook: Boole
      * Change bullet appearance depending on folding state and number of descendants.
      */
     private fun setupBullet(holder: NoteItemViewHolder, note: Note) {
-        if (inBook) {
-            if (note.position.descendantsCount > 0) { // With descendants
-                if (note.position.isFolded) { // Folded
-                    holder.binding.itemHeadBullet.setImageDrawable(attrs.bulletFolded)
-                } else { // Not folded
-                    holder.binding.itemHeadBullet.setImageDrawable(attrs.bulletUnfolded)
-                }
-            } else { // No descendants
-                holder.binding.itemHeadBullet.setImageDrawable(attrs.bulletDefault)
-            }
-
-            holder.binding.itemHeadBullet.visibility = View.VISIBLE
-
-        } else {
+        if (!inBook) {
             holder.binding.itemHeadBullet.visibility = View.GONE
+            return
         }
+
+        if (note.position.descendantsCount > 0) { // With descendants
+            if (note.position.isFolded) { // Folded
+                holder.binding.itemHeadBullet.setImageResource(R.drawable.bullet_folded)
+            } else { // Not folded
+                holder.binding.itemHeadBullet.setImageResource(R.drawable.bullet)
+            }
+        } else { // No descendants
+            holder.binding.itemHeadBullet.setImageResource(R.drawable.bullet)
+        }
+
+        holder.binding.itemHeadBullet.visibility = View.VISIBLE
+
     }
 
     private fun setupFoldingButtons(holder: NoteItemViewHolder, note: Note) {
@@ -383,6 +389,8 @@ class NoteItemViewBinder(private val context: Context, private val inBook: Boole
     }
 
     companion object {
+        const val ARCHIVE_TAG = "ARCHIVE"
+
         /**
          * Setup margins or padding for different list density settings.
          */
@@ -456,38 +464,26 @@ class NoteItemViewBinder(private val context: Context, private val inBook: Boole
 
 
     private data class Attrs(
-            @ColorInt val todoColor: Int,
-            @ColorInt val doneColor: Int,
-            @ColorInt val unknownColor: Int,
-            val postTitleTextSize: Int,
-            @ColorInt val postTitleTextColor: Int,
-            val bulletDefault: Drawable,
-            val bulletFolded: Drawable,
-            val bulletUnfolded: Drawable
+        @ColorInt val todoColor: Int,
+        @ColorInt val doneColor: Int,
+        val postTitleTextSize: Int,
+        @ColorInt val postTitleTextColor: Int
     ) {
         companion object {
             @SuppressWarnings("ResourceType")
             fun obtain(context: Context): Attrs {
                 return context.styledAttributes(
-                        intArrayOf(
-                                R.attr.item_head_state_todo_color,
-                                R.attr.item_head_state_done_color,
-                                R.attr.item_head_state_unknown_color,
-                                R.attr.item_head_post_title_text_size,
-                                R.attr.item_head_post_title_color,
-                                R.attr.bullet_default,
-                                R.attr.bullet_folded,
-                                R.attr.bullet_unfolded)) { typedArray ->
+                    intArrayOf(
+                        R.attr.item_head_state_todo_color,
+                        R.attr.item_head_state_done_color,
+                        R.attr.item_head_post_title_text_size,
+                        android.R.attr.textColorTertiary)) { typedArray ->
 
                     Attrs(
-                            typedArray.getColor(0, 0),
-                            typedArray.getColor(1, 0),
-                            typedArray.getColor(2, 0),
-                            typedArray.getDimensionPixelSize(3, 0),
-                            typedArray.getColor(4, 0),
-                            typedArray.getDrawable(5)!!,
-                            typedArray.getDrawable(6)!!,
-                            typedArray.getDrawable(7)!!)
+                        typedArray.getColor(0, 0),
+                        typedArray.getColor(1, 0),
+                        typedArray.getDimensionPixelSize(2, 0),
+                        typedArray.getColor(3, 0))
                 }
             }
         }

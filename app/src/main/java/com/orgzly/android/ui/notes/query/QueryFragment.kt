@@ -1,23 +1,21 @@
 package com.orgzly.android.ui.notes.query
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
-import androidx.appcompat.view.ActionMode
-import androidx.lifecycle.ViewModelProviders
-import com.orgzly.BuildConfig
+import android.view.MotionEvent
+import android.view.View
+import android.widget.PopupWindow
+import androidx.lifecycle.ViewModelProvider
 import com.orgzly.R
-import com.orgzly.android.ui.ActionModeListener
-import com.orgzly.android.ui.BottomActionBar
+import com.orgzly.android.sync.SyncRunner
 import com.orgzly.android.ui.dialogs.TimestampDialogFragment
 import com.orgzly.android.ui.drawer.DrawerItem
 import com.orgzly.android.ui.main.SharedMainActivityViewModel
+import com.orgzly.android.ui.notes.NotePopup
 import com.orgzly.android.ui.notes.NotesFragment
-import com.orgzly.android.ui.util.ActivityUtils
-import com.orgzly.android.util.LogUtils
+import com.orgzly.android.ui.settings.SettingsActivity
 
 /**
  * Displays query results.
@@ -25,8 +23,7 @@ import com.orgzly.android.util.LogUtils
 abstract class QueryFragment :
         NotesFragment(),
         TimestampDialogFragment.OnDateTimeSetListener,
-        DrawerItem,
-        BottomActionBar.Callback {
+        DrawerItem {
 
     /** Currently active query.  */
     var currentQuery: String? = null
@@ -50,101 +47,71 @@ abstract class QueryFragment :
         super.onAttach(context)
 
         listener = activity as Listener
-        actionModeListener = activity as ActionModeListener
 
-        currentQuery = arguments!!.getString(ARG_QUERY)
+        currentQuery = requireArguments().getString(ARG_QUERY)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        sharedMainActivityViewModel = ViewModelProviders.of(requireActivity())
+        sharedMainActivityViewModel = ViewModelProvider(requireActivity())
                 .get(SharedMainActivityViewModel::class.java)
 
         setHasOptionsMenu(true)
     }
 
-    override fun onResume() {
-        super.onResume()
 
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
-
-        announceChangesToActivity()
-    }
-
-    internal abstract fun announceChangesToActivity()
-
-    override fun onDetach() {
-        super.onDetach()
-
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
-
-        actionModeListener = null
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, menu, inflater)
-
-        inflater.inflate(R.menu.query_actions, menu)
-
-        ActivityUtils.keepScreenOnUpdateMenuItem(
-                activity,
-                menu,
-                menu.findItem(R.id.query_options_keep_screen_on))
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, item)
-
-        return when (item.itemId) {
-            R.id.query_options_keep_screen_on -> {
-                dialog = ActivityUtils.keepScreenOnToggle(activity, item)
-                true
-            }
-
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
-
-    protected fun handleActionItemClick(actionId: Int, actionMode: ActionMode?, ids: Set<Long>) {
+    protected fun handleActionItemClick(ids: Set<Long>, actionId: Int) {
         if (ids.isEmpty()) {
             Log.e(TAG, "Cannot handle action when there are no items selected")
-            actionMode?.finish()
             return
         }
 
         when (actionId) {
-            R.id.quick_bar_schedule,
-            R.id.bottom_action_bar_schedule ->
-                displayTimestampDialog(R.id.bottom_action_bar_schedule, ids)
+            R.id.note_popup_set_schedule,
+            R.id.schedule ->
+                displayTimestampDialog(R.id.schedule, ids)
 
-            R.id.quick_bar_deadline,
-            R.id.bottom_action_bar_deadline ->
-                displayTimestampDialog(R.id.bottom_action_bar_deadline, ids)
+            R.id.note_popup_set_deadline,
+            R.id.deadline ->
+                displayTimestampDialog(R.id.deadline, ids)
 
-            R.id.quick_bar_clock_in ->
-                sharedMainActivityViewModel.clockingUpdateRequest(ids, 0)
-            R.id.quick_bar_clock_out ->
-                sharedMainActivityViewModel.clockingUpdateRequest(ids, 1)
-            R.id.quick_bar_clock_cancel ->
-                sharedMainActivityViewModel.clockingUpdateRequest(ids, 2)
-
-            R.id.quick_bar_state,
-            R.id.bottom_action_bar_state ->
+            R.id.note_popup_set_state,
+            R.id.state ->
                 listener?.let {
                     openNoteStateDialog(it, ids, null)
                 }
 
-            R.id.quick_bar_focus,
-            R.id.bottom_action_bar_focus ->
+            R.id.note_popup_toggle_state,
+            R.id.toggle_state -> {
+                listener?.onStateToggleRequest(ids)
+            }
+
+            R.id.note_popup_clock_in,
+            R.id.clock_in -> {
+                listener?.onClockIn(ids)
+            }
+
+            R.id.note_popup_clock_out,
+            R.id.clock_out -> {
+                listener?.onClockOut(ids)
+            }
+
+            R.id.note_popup_clock_cancel,
+            R.id.clock_cancel -> {
+                listener?.onClockCancel(ids)
+            }
+
+            R.id.note_popup_focus,
+            R.id.focus ->
                 listener?.onNoteFocusInBookRequest(ids.first())
 
-            R.id.quick_bar_open ->
-                listener?.onNoteOpen(ids.first())
+            R.id.sync -> {
+                SyncRunner.startSync()
+            }
 
-            R.id.quick_bar_done,
-            R.id.bottom_action_bar_done -> {
-                listener?.onStateToggleRequest(ids)
+            R.id.activity_action_settings -> {
+                startActivity(Intent(context, SettingsActivity::class.java))
             }
         }
     }

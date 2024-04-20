@@ -1,17 +1,13 @@
 package com.orgzly.android.ui.repo.webdav
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
 import android.view.WindowManager
-import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModelProviders
+import androidx.lifecycle.ViewModelProvider
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.orgzly.R
 import com.orgzly.android.App
 import com.orgzly.android.repos.RepoFactory
@@ -20,7 +16,8 @@ import com.orgzly.android.repos.WebdavRepo.Companion.CERTIFICATES_PREF_KEY
 import com.orgzly.android.repos.WebdavRepo.Companion.PASSWORD_PREF_KEY
 import com.orgzly.android.repos.WebdavRepo.Companion.USERNAME_PREF_KEY
 import com.orgzly.android.ui.CommonActivity
-import com.orgzly.android.ui.util.ActivityUtils
+import com.orgzly.android.ui.showSnackbar
+import com.orgzly.android.ui.util.KeyboardUtils
 import com.orgzly.android.util.UriUtils
 import com.orgzly.databinding.ActivityRepoWebdavBinding
 import com.orgzly.databinding.DialogCertificatesBinding
@@ -39,9 +36,13 @@ class WebdavRepoActivity : CommonActivity() {
 
         super.onCreate(savedInstanceState)
 
-        binding = DataBindingUtil.setContentView(this, R.layout.activity_repo_webdav)
+        binding = ActivityRepoWebdavBinding.inflate(layoutInflater)
 
-        setupActionBar(R.string.webdav)
+        setContentView(binding.root)
+
+        binding.activityRepoWebdavCertificates.setOnClickListener {
+            editCertificates()
+        }
 
         binding.activityRepoWebdavTestButton.setOnClickListener {
             testConnection()
@@ -50,7 +51,7 @@ class WebdavRepoActivity : CommonActivity() {
         val repoId = intent.getLongExtra(ARG_REPO_ID, 0)
         val factory = WebdavRepoViewModelFactory.getInstance(dataRepository, repoId)
 
-        viewModel = ViewModelProviders.of(this, factory).get(WebdavRepoViewModel::class.java)
+        viewModel = ViewModelProvider(this, factory).get(WebdavRepoViewModel::class.java)
 
         viewModel.finishEvent.observeSingle(this, Observer {
             finish()
@@ -114,30 +115,15 @@ class WebdavRepoActivity : CommonActivity() {
                 viewModel.certificates.value = repoWithProps.props[CERTIFICATES_PREF_KEY]
             }
         }
-    }
 
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        super.onCreateOptionsMenu(menu)
-
-        menuInflater.inflate(R.menu.done, menu)
-
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.done -> {
-                saveAndFinish()
-                true
-            }
-
-            android.R.id.home -> {
+        binding.topToolbar.run {
+            setNavigationOnClickListener {
                 finish()
-                true
             }
+        }
 
-            else ->
-                super.onOptionsItemSelected(item)
+        binding.fab.setOnClickListener {
+            saveAndFinish()
         }
     }
 
@@ -161,7 +147,7 @@ class WebdavRepoActivity : CommonActivity() {
 
             } else {
                 // Warn about clear-text traffic
-                alertDialog = AlertDialog.Builder(this)
+                alertDialog = MaterialAlertDialogBuilder(this)
                         .setTitle(R.string.cleartext_traffic)
                         .setMessage(R.string.cleartext_traffic_message)
                         .setPositiveButton(R.string.yes) { _, _ ->
@@ -216,12 +202,12 @@ class WebdavRepoActivity : CommonActivity() {
                 && binding.activityRepoWebdavPasswordLayout.error == null
     }
 
-    fun editCertificates(@Suppress("UNUSED_PARAMETER") view: View) {
+    private fun editCertificates() {
         val dialogBinding = DialogCertificatesBinding.inflate(layoutInflater).apply {
             certificates.setText(viewModel.certificates.value)
         }
 
-        alertDialog = AlertDialog.Builder(this)
+        alertDialog = MaterialAlertDialogBuilder(this)
                 .setTitle(getString(R.string.trusted_certificates))
                 .setPositiveButton(R.string.set) { _, _ ->
                     viewModel.certificates.value = dialogBinding.certificates.text.toString()
@@ -240,7 +226,7 @@ class WebdavRepoActivity : CommonActivity() {
     }
 
     private fun testConnection() {
-        ActivityUtils.closeSoftKeyboard(this)
+        KeyboardUtils.closeSoftKeyboard(this)
 
         if (!isInputValid()) {
             return

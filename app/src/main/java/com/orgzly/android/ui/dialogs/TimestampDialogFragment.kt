@@ -1,6 +1,5 @@
 package com.orgzly.android.ui.dialogs
 
-import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.app.Dialog
 import android.app.TimePickerDialog
@@ -8,22 +7,20 @@ import android.os.Bundle
 import android.text.format.DateFormat
 import android.view.LayoutInflater
 import android.view.View
-
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
-import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModelProviders
-
+import androidx.lifecycle.ViewModelProvider
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.orgzly.BuildConfig
 import com.orgzly.R
 import com.orgzly.android.ui.TimeType
+import com.orgzly.android.ui.util.KeyboardUtils
 import com.orgzly.android.util.LogUtils
 import com.orgzly.android.util.UserTimeFormatter
 import com.orgzly.databinding.DialogTimestampBinding
 import com.orgzly.databinding.DialogTimestampTitleBinding
 import com.orgzly.org.datetime.OrgDateTime
-
-import java.util.Calendar
-import java.util.TreeSet
+import java.util.*
 
 class TimestampDialogFragment : DialogFragment(), View.OnClickListener {
     private var listener: OnDateTimeSetListener? = null
@@ -74,7 +71,7 @@ class TimestampDialogFragment : DialogFragment(), View.OnClickListener {
 
 
         val factory = TimestampDialogViewModelFactory.getInstance(timeType, dateTimeString)
-        viewModel = ViewModelProviders.of(this, factory).get(TimestampDialogViewModel::class.java)
+        viewModel = ViewModelProvider(this, factory).get(TimestampDialogViewModel::class.java)
 
         setupObservers()
 
@@ -114,20 +111,20 @@ class TimestampDialogFragment : DialogFragment(), View.OnClickListener {
         binding.nextWeekButton.setOnClickListener(this)
 
 
-        return AlertDialog.Builder(requireContext())
-                .setCustomTitle(titleBinding.root)
-                .setView(binding.root)
-                .setPositiveButton(R.string.set) { _, _ ->
-                    val time = viewModel.getOrgDateTime()
-                    listener?.onDateTimeSet(dialogId, noteIds, time)
-                }
-                .setNeutralButton(R.string.clear) { _, _ ->
-                    listener?.onDateTimeSet(dialogId, noteIds, null)
-                }
-                .setNegativeButton(R.string.cancel) { _, _ ->
-                    listener?.onDateTimeAborted(dialogId, noteIds)
-                }
-                .show()
+        return MaterialAlertDialogBuilder(requireContext())
+            .setCustomTitle(titleBinding.root)
+            .setView(binding.root)
+            .setPositiveButton(R.string.set) { _, _ ->
+                val time = viewModel.getOrgDateTime()
+                listener?.onDateTimeSet(dialogId, noteIds, time)
+            }
+            .setNeutralButton(R.string.clear) { _, _ ->
+                listener?.onDateTimeSet(dialogId, noteIds, null)
+            }
+            .setNegativeButton(R.string.cancel) { _, _ ->
+                listener?.onDateTimeAborted(dialogId, noteIds)
+            }
+            .show()
     }
 
     /**
@@ -136,35 +133,22 @@ class TimestampDialogFragment : DialogFragment(), View.OnClickListener {
     override fun onClick(v: View) {
         when (v.id) {
             R.id.date_picker_button -> {
-                val yearMonthDay = viewModel.getYearMonthDay()
-
                 val picker = DatePickerDialog(requireContext(), { _, year, monthOfYear, dayOfMonth ->
                     viewModel.set(year, monthOfYear, dayOfMonth)
-                }, yearMonthDay.first, yearMonthDay.second, yearMonthDay.third)
+                }, viewModel.getYearMonthDay().first, viewModel.getYearMonthDay().second, viewModel.getYearMonthDay().third)
 
-                picker.setOnDismissListener {
-                    pickerDialog = null
-                }
-
-                pickerDialog = picker.apply {
-                    show()
-                }
+                picker.show()
             }
 
             R.id.time_picker_button -> {
                 val hourMinute = viewModel.getTimeHourMinute()
 
+
                 val picker = TimePickerDialog(requireContext(), { _, hourOfDay, minute ->
                     viewModel.setTime(hourOfDay, minute)
                 }, hourMinute.first, hourMinute.second, DateFormat.is24HourFormat(context))
 
-                picker.setOnDismissListener {
-                    pickerDialog = null
-                }
-
-                pickerDialog = picker.apply {
-                    show()
-                }
+                picker.show()
             }
 
             R.id.end_time_picker_button -> {
@@ -174,13 +158,7 @@ class TimestampDialogFragment : DialogFragment(), View.OnClickListener {
                     viewModel.setEndTime(hourOfDay, minute)
                 }, hourMinute.first, hourMinute.second, DateFormat.is24HourFormat(context))
 
-                picker.setOnDismissListener {
-                    pickerDialog = null
-                }
-
-                pickerDialog = picker.apply {
-                    show()
-                }
+                picker.show()
             }
 
             R.id.repeater_picker_button -> {
@@ -243,7 +221,7 @@ class TimestampDialogFragment : DialogFragment(), View.OnClickListener {
     }
 
     private fun setupObservers() {
-        viewModel.dateTime.observe(requireActivity(), Observer { dateTime ->
+        viewModel.dateTime.observe(requireActivity()) { dateTime ->
             if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, dateTime)
 
             val orgDateTime = viewModel.getOrgDateTime(dateTime)
@@ -267,7 +245,12 @@ class TimestampDialogFragment : DialogFragment(), View.OnClickListener {
 
             binding.delayPickerButton.text = userTimeFormatter.formatDelay(dateTime)
             binding.delayUsedCheckbox.isChecked = dateTime.isDelayUsed
-        })
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        KeyboardUtils.closeSoftKeyboard(activity)
     }
 
     override fun onPause() {

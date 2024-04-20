@@ -30,7 +30,7 @@ class SavedSearchesAdapter(
         }
 
         override fun onClick(view: View) {
-            adapterPosition.let { position ->
+            bindingAdapterPosition.let { position ->
                 if (position != RecyclerView.NO_POSITION) {
                     clickListener.onClick(view, position, getItem(position))
                 } else {
@@ -40,7 +40,7 @@ class SavedSearchesAdapter(
         }
 
         override fun onLongClick(view: View): Boolean {
-            adapterPosition.let { position ->
+            bindingAdapterPosition.let { position ->
                 return if (position != RecyclerView.NO_POSITION) {
                     clickListener.onLongClick(view, position, getItem(position))
                     true
@@ -64,7 +64,7 @@ class SavedSearchesAdapter(
             name.text = savedSearch.name
             query.text = savedSearch.query
 
-            getSelection().setIsSelectedBackground(container, savedSearch.id)
+            getSelection().setBackgroundIfSelected(container, savedSearch.id)
         }
     }
 
@@ -74,6 +74,13 @@ class SavedSearchesAdapter(
 
     override fun getSelection(): Selection {
         return adapterSelection
+    }
+
+    fun clearSelection() {
+        if (getSelection().count > 0) {
+            getSelection().clear()
+            notifyDataSetChanged() // FIXME
+        }
     }
 
     companion object {

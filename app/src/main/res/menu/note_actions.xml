@@ -5,21 +5,37 @@
     tools:ignore="AlwaysShowAction">
 
     <item
-        android:id="@+id/note_view_edit"
-        android:title=""
-        app:showAsAction="always"
-        app:actionLayout="@layout/note_view_edit_switch">
+        android:id="@+id/done"
+        android:title="@string/done"
+        android:icon="@drawable/ic_done"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/clock"
+        android:icon="@drawable/ic_hourglass_empty"
+        app:showAsAction="never"
+        android:title="@string/clock">
+        <menu>
+            <item
+                android:id="@+id/clock_in"
+                android:icon="@drawable/ic_hourglass_top"
+                android:title="@string/clock_in" />
+
+            <item
+                android:id="@+id/clock_out"
+                android:icon="@drawable/ic_hourglass_bottom"
+                android:title="@string/clock_out" />
+
+            <item
+                android:id="@+id/clock_cancel"
+                android:icon="@drawable/ic_hourglass_disabled"
+                android:title="@string/clock_cancel" />
+        </menu>
     </item>
 
     <item
-        android:id="@+id/done"
-        android:icon="?attr/ic_done_24dp"
-        app:showAsAction="always"
-        android:title="@string/done" />
-
-    <item
         android:id="@+id/metadata"
-        android:icon="?attr/ic_unfold_more_24dp"
+        android:icon="@drawable/ic_info_outline"
         app:showAsAction="never"
         android:title="@string/metadata">
         <menu>
@@ -40,8 +56,24 @@
     </item>
 
     <item
+        android:id="@+id/keep_screen_on"
+        app:showAsAction="never"
+        android:checkable="true"
+        android:title="@string/keep_screen_on"/>
+
+    <item
         android:id="@+id/delete"
-        android:icon="?attr/ic_delete_24dp"
+        android:icon="@drawable/ic_delete"
         app:showAsAction="never"
         android:title="@string/delete" />
+
+    <item
+        android:id="@+id/sync"
+        app:showAsAction="never"
+        android:title="@string/sync"/>
+
+    <item
+        android:id="@+id/activity_action_settings"
+        app:showAsAction="never"
+        android:title="@string/settings"/>
 </menu>

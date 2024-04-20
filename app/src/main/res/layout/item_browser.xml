@@ -4,8 +4,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:paddingLeft="@dimen/screen_edge"
-    android:paddingRight="@dimen/screen_edge"
+    android:paddingStart="@dimen/screen_edge"
+    android:paddingEnd="@dimen/screen_edge"
     android:minHeight="48dp"
     android:orientation="horizontal"
     android:gravity="center_vertical">
@@ -14,19 +14,16 @@
         android:id="@+id/item_browser_icon"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:alpha="?attr/active_unfocused_icon_alpha"
-        android:src="?attr/ic_folder_open_24dp" />
+        android:src="@drawable/ic_folder_open" />
 
     <TextView
         android:id="@+id/item_browser_name"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginLeft="@dimen/content_left_margin_from_icon"
-        android:layout_marginStart="@dimen/content_left_margin_from_icon"
+        android:layout_marginStart="@dimen/screen_edge"
         android:paddingTop="2dp"
         android:paddingBottom="2dp"
         android:textSize="?attr/font_medium"
-        android:textColor="?attr/text_primary_color"
         tools:text="FileOrDirectory" />
 
 </LinearLayout>

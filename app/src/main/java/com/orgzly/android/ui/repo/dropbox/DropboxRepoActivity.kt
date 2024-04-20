@@ -2,18 +2,17 @@ package com.orgzly.android.ui.repo.dropbox
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.DialogInterface
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.text.TextUtils
-import android.view.Menu
-import android.view.MenuItem
 import android.widget.EditText
-import androidx.databinding.DataBindingUtil
+import androidx.core.content.ContextCompat
+import androidx.core.widget.ImageViewCompat
 import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModelProviders
+import androidx.lifecycle.ViewModelProvider
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.orgzly.BuildConfig
 import com.orgzly.R
 import com.orgzly.android.App
@@ -24,8 +23,8 @@ import com.orgzly.android.repos.RepoType
 import com.orgzly.android.ui.CommonActivity
 import com.orgzly.android.ui.repo.RepoViewModel
 import com.orgzly.android.ui.repo.RepoViewModelFactory
-import com.orgzly.android.ui.util.ActivityUtils
-import com.orgzly.android.ui.util.styledAttributes
+import com.orgzly.android.ui.showSnackbar
+import com.orgzly.android.ui.util.KeyboardUtils
 import com.orgzly.android.util.LogUtils
 import com.orgzly.android.util.MiscUtils
 import com.orgzly.android.util.UriUtils
@@ -48,9 +47,9 @@ class DropboxRepoActivity : CommonActivity() {
 
         super.onCreate(savedInstanceState)
 
-        binding = DataBindingUtil.setContentView(this, R.layout.activity_repo_dropbox)
+        binding = ActivityRepoDropboxBinding.inflate(layoutInflater)
 
-        setupActionBar(R.string.dropbox)
+        setContentView(binding.root)
 
         /* Dropbox link / unlink button. */
         binding.activityRepoDropboxLinkButton.setOnClickListener {
@@ -83,7 +82,7 @@ class DropboxRepoActivity : CommonActivity() {
 
         val factory = RepoViewModelFactory.getInstance(dataRepository, repoId)
 
-        viewModel = ViewModelProviders.of(this, factory).get(RepoViewModel::class.java)
+        viewModel = ViewModelProvider(this, factory).get(RepoViewModel::class.java)
 
         if (viewModel.repoId != 0L) { // Editing existing
             viewModel.loadRepoProperties()?.let { repoWithProps ->
@@ -111,9 +110,19 @@ class DropboxRepoActivity : CommonActivity() {
                 binding.activityRepoDropboxDirectory,
                 binding.activityRepoDropboxDirectoryInputLayout)
 
-        ActivityUtils.openSoftKeyboardWithDelay(this, binding.activityRepoDropboxDirectory)
+        KeyboardUtils.openSoftKeyboard(binding.activityRepoDropboxDirectory)
 
         client = DropboxClient(applicationContext, repoId)
+
+        binding.topToolbar.run {
+            setNavigationOnClickListener {
+                finish()
+            }
+        }
+
+        binding.fab.setOnClickListener {
+            saveAndFinish()
+        }
     }
 
     private fun editAccessToken() {
@@ -130,7 +139,7 @@ class DropboxRepoActivity : CommonActivity() {
             }
         }
 
-        alertDialog = AlertDialog.Builder(this)
+        alertDialog = MaterialAlertDialogBuilder(this)
                 .setView(view)
                 .setTitle(R.string.access_token)
                 .setPositiveButton(R.string.set) { _, _ ->
@@ -150,7 +159,7 @@ class DropboxRepoActivity : CommonActivity() {
                 .setNegativeButton(R.string.cancel) { _, _ -> }
                 .create().apply {
                     setOnShowListener {
-                        ActivityUtils.openSoftKeyboard(this@DropboxRepoActivity, editView)
+                        KeyboardUtils.openSoftKeyboard(editView)
                     }
 
                     show()
@@ -163,31 +172,6 @@ class DropboxRepoActivity : CommonActivity() {
         dropboxCompleteAuthentication()
 
         updateDropboxLinkUnlinkButton()
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        super.onCreateOptionsMenu(menu)
-
-        menuInflater.inflate(R.menu.done, menu)
-
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.done -> {
-                saveAndFinish()
-                true
-            }
-
-            android.R.id.home -> {
-                finish()
-                true
-            }
-
-            else ->
-                super.onOptionsItemSelected(item)
-        }
     }
 
     private fun saveAndFinish() {
@@ -221,7 +205,7 @@ class DropboxRepoActivity : CommonActivity() {
             }
         }
 
-        alertDialog = AlertDialog.Builder(this)
+        alertDialog = MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.confirm_unlinking_from_dropbox_title)
                 .setMessage(R.string.confirm_unlinking_from_dropbox_message)
                 .setPositiveButton(R.string.unlink, dialogClickListener)
@@ -268,22 +252,23 @@ class DropboxRepoActivity : CommonActivity() {
     private fun updateDropboxLinkUnlinkButton() {
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
 
-        val resources = styledAttributes(R.styleable.Icons) { typedArray ->
+        binding.activityRepoDropboxLinkButton.text =
             if (isDropboxLinked()) {
-                Pair(
-                        getString(R.string.repo_dropbox_button_linked),
-                        typedArray.getResourceId(R.styleable.Icons_oic_dropbox_linked, 0))
+                getString(R.string.repo_dropbox_button_linked)
             } else {
-                Pair(
-                        getString(R.string.repo_dropbox_button_not_linked),
-                        typedArray.getResourceId(R.styleable.Icons_oic_dropbox_not_linked, 0))
+                getString(R.string.repo_dropbox_button_not_linked)
             }
-        }
 
-        binding.activityRepoDropboxLinkButton.text = resources.first
+        binding.activityRepoDropboxIcon.let { icon ->
+            icon.setImageResource(R.drawable.cic_dropbox)
 
-        if (resources.second != 0) {
-            binding.activityRepoDropboxIcon.setImageResource(resources.second)
+            // Tint the icon blue if linked
+            if (isDropboxLinked()) {
+                ImageViewCompat.setImageTintList(
+                    icon,
+                    ContextCompat.getColorStateList(this, R.color.dropbox_blue)
+                )
+            }
         }
     }
 

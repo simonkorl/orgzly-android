@@ -1,54 +1,54 @@
 package com.orgzly.android.espresso;
 
-import android.content.Intent;
-import android.net.Uri;
-import android.os.SystemClock;
-
-import androidx.test.core.app.ActivityScenario;
-
-import com.orgzly.R;
-import com.orgzly.android.AppIntent;
-import com.orgzly.android.OrgzlyTest;
-import com.orgzly.android.db.entity.Repo;
-import com.orgzly.android.repos.RepoType;
-import com.orgzly.android.sync.BookSyncStatus;
-import com.orgzly.android.sync.SyncService;
-import com.orgzly.android.ui.main.MainActivity;
-import com.orgzly.test.BuildConfig;
-
-import org.junit.Assert;
-import org.junit.Assume;
-import org.junit.Test;
-
-import java.io.IOException;
-
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.longClick;
-import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.contrib.DrawerActions.close;
 import static androidx.test.espresso.contrib.DrawerActions.open;
 import static androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
-import static com.orgzly.android.espresso.EspressoUtils.clickSetting;
-import static com.orgzly.android.espresso.EspressoUtils.onActionItemClick;
-import static com.orgzly.android.espresso.EspressoUtils.onBook;
-import static com.orgzly.android.espresso.EspressoUtils.onListItem;
-import static com.orgzly.android.espresso.EspressoUtils.onNoteInBook;
-import static com.orgzly.android.espresso.EspressoUtils.onNotesInBook;
-import static com.orgzly.android.espresso.EspressoUtils.onSnackbar;
-import static com.orgzly.android.espresso.EspressoUtils.openContextualToolbarOverflowMenu;
-import static com.orgzly.android.espresso.EspressoUtils.recyclerViewItemCount;
-import static com.orgzly.android.espresso.EspressoUtils.replaceTextCloseKeyboard;
-import static com.orgzly.android.espresso.EspressoUtils.settingsSetTodoKeywords;
+import static com.orgzly.android.espresso.util.EspressoUtils.clickSetting;
+import static com.orgzly.android.espresso.util.EspressoUtils.contextualToolbarOverflowMenu;
+import static com.orgzly.android.espresso.util.EspressoUtils.onActionItemClick;
+import static com.orgzly.android.espresso.util.EspressoUtils.onBook;
+import static com.orgzly.android.espresso.util.EspressoUtils.onListItem;
+import static com.orgzly.android.espresso.util.EspressoUtils.onNoteInBook;
+import static com.orgzly.android.espresso.util.EspressoUtils.onNotesInBook;
+import static com.orgzly.android.espresso.util.EspressoUtils.onSnackbar;
+import static com.orgzly.android.espresso.util.EspressoUtils.recyclerViewItemCount;
+import static com.orgzly.android.espresso.util.EspressoUtils.replaceTextCloseKeyboard;
+import static com.orgzly.android.espresso.util.EspressoUtils.settingsSetTodoKeywords;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.not;
+
+import android.net.Uri;
+import android.os.SystemClock;
+import android.widget.TextView;
+
+import androidx.test.core.app.ActivityScenario;
+
+import com.orgzly.BuildConfig;
+import com.orgzly.R;
+import com.orgzly.android.OrgzlyTest;
+import com.orgzly.android.db.entity.Repo;
+import com.orgzly.android.repos.RepoType;
+import com.orgzly.android.sync.BookSyncStatus;
+import com.orgzly.android.sync.SyncRunner;
+import com.orgzly.android.ui.main.MainActivity;
+
+import org.junit.Assert;
+import org.junit.Assume;
+import org.junit.Test;
+
+import java.io.IOException;
 
 @SuppressWarnings("unchecked")
 public class SyncingTest extends OrgzlyTest {
@@ -75,7 +75,7 @@ public class SyncingTest extends OrgzlyTest {
         ActivityScenario.launch(MainActivity.class);
 
         onView(allOf(withText("booky"), isDisplayed())).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_set_link)).perform(click());
         onView(withText("mock://repo-a")).perform(click());
 
@@ -86,7 +86,8 @@ public class SyncingTest extends OrgzlyTest {
                 .check(matches((withText(containsString(context.getString(R.string.force_loaded_from_uri, "mock://repo-a/booky.org"))))));
 
         onView(allOf(withText("booky"), isDisplayed())).perform(click());
-        onView(withText("New content")).check(matches(isDisplayed()));
+        onView(allOf(withId(R.id.item_preface_text_view), withText("New content")))
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -111,9 +112,9 @@ public class SyncingTest extends OrgzlyTest {
 
         // Create note
         onView(withId(R.id.fab)).perform(click());
-        onView(withId(R.id.fragment_note_title))
+        onView(withId(R.id.title_edit))
                 .perform(replaceTextCloseKeyboard("new note created by test"));
-        onView(withId(R.id.done)).perform(click());
+        onView(withId(R.id.done)).perform(click()); // Note done
 
         // Check it is synced
         onView(withId(R.id.drawer_layout)).perform(open());
@@ -135,9 +136,10 @@ public class SyncingTest extends OrgzlyTest {
         // Change preface
         onBook(0).perform(click());
         onActionItemClick(R.id.books_options_menu_book_preface, R.string.edit_book_preface);
-        onView(withId(R.id.fragment_book_preface_content))
+        onView(withId(R.id.fragment_book_preface_content)).perform(click());
+        onView(withId(R.id.fragment_book_preface_content_edit))
                 .perform(replaceTextCloseKeyboard("Modified preface"));
-        onView(withId(R.id.done)).perform(click());
+        onView(withId(R.id.done)).perform(click()); // Preface done
         pressBack();
 
         onBook(0, R.id.item_book_sync_needed_icon).check(matches(isDisplayed()));
@@ -153,7 +155,7 @@ public class SyncingTest extends OrgzlyTest {
         // Modify book
         onBook(0).perform(click());
         onNoteInBook(1).perform(longClick());
-        onView(withId(R.id.bottom_action_bar_done)).perform(click());
+        onView(withId(R.id.toggle_state)).perform(click());
         pressBack();
         pressBack();
 
@@ -197,7 +199,7 @@ public class SyncingTest extends OrgzlyTest {
         ActivityScenario.launch(MainActivity.class);
 
         onView(allOf(withText("book-one"), isDisplayed())).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_set_link)).perform(click());
         onView(withText("mock://repo-a")).perform(click());
 
@@ -236,7 +238,7 @@ public class SyncingTest extends OrgzlyTest {
         // Modify book
         onBook(0).perform(click());
         onNoteInBook(1).perform(longClick());
-        onView(withId(R.id.bottom_action_bar_done)).perform(click());
+        onView(withId(R.id.toggle_state)).perform(click());
         pressBack();
         pressBack();
 
@@ -313,7 +315,7 @@ public class SyncingTest extends OrgzlyTest {
     }
 
     @Test
-    public void testSyncButton() throws IOException {
+    public void testSyncButton() {
         testUtils.setupRepo(RepoType.MOCK, "mock://repo-a");
         testUtils.setupBook("book-one", "First book used for testing\n* Note A");
         testUtils.setupBook("book-two", "Second book used for testing\n* Note 1\n* Note 2");
@@ -323,7 +325,7 @@ public class SyncingTest extends OrgzlyTest {
     }
 
     @Test
-    public void testSavingAndLoadingBookBySyncing() throws IOException {
+    public void testSavingAndLoadingBookBySyncing() {
         testUtils.setupRepo(RepoType.MOCK, "mock://repo-a");
         testUtils.setupBook("booky",
                 "Sample book used for tests\n" +
@@ -335,7 +337,7 @@ public class SyncingTest extends OrgzlyTest {
         sync();
         onView(allOf(withText("booky"), isDisplayed())).check(matches(isDisplayed()));
         onBook(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.delete)).perform(click());
         onView(withText(R.string.delete)).perform(click());
         onView(withId(R.id.item_book_card_view)).check(matches(not(isDisplayed())));
@@ -344,11 +346,11 @@ public class SyncingTest extends OrgzlyTest {
         onView(allOf(withText("booky"), isDisplayed())).check(matches(isDisplayed()));
         onBook(0).perform(click());
         onNoteInBook(2).perform(click());
-        onView(withId(R.id.fragment_note_container)).check(matches(isDisplayed()));
+        onView(withId(R.id.scroll_view)).check(matches(isDisplayed()));
     }
 
     @Test
-    public void testBackToModifiedBookAfterSyncing() throws IOException {
+    public void testBackToModifiedBookAfterSyncing() {
         Repo repo = testUtils.setupRepo(RepoType.MOCK, "mock://repo-a");
 
         testUtils.setupBook("booky",
@@ -384,11 +386,12 @@ public class SyncingTest extends OrgzlyTest {
 
         /* Go back to book. */
         pressBack();
-        onView(withText("NEW CONTENT")).check(matches(isDisplayed()));
+        onView(allOf(withId(R.id.item_preface_text_view), withText("NEW CONTENT")))
+                .check(matches(isDisplayed()));
     }
 
     @Test
-    public void testBookParsingAfterKeywordsSettingChange() throws IOException {
+    public void testBookParsingAfterKeywordsSettingChange() {
         testUtils.setupRepo(RepoType.MOCK, "mock://repo-a");
         testUtils.setupBook("booky",
                 "Sample book used for tests\n" +
@@ -412,7 +415,7 @@ public class SyncingTest extends OrgzlyTest {
 
         /* Open note "ANTIVIVISECTIONISTS Note #10." and check title. */
         onNoteInBook(10).perform(click());
-        onView(withId(R.id.fragment_note_title)).check(matches(allOf(withText("ANTIVIVISECTIONISTS Note #10."), isDisplayed())));
+        onView(withId(R.id.title_view)).check(matches(allOf(withText("ANTIVIVISECTIONISTS Note #10."), isDisplayed())));
 
         settingsSetTodoKeywords("ANTIVIVISECTIONISTS");
 
@@ -422,7 +425,7 @@ public class SyncingTest extends OrgzlyTest {
 
         /* Delete book */
         onBook(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.delete)).perform(click());
         onView(withText(R.string.delete)).perform(click());
 
@@ -432,11 +435,11 @@ public class SyncingTest extends OrgzlyTest {
 
         /* Open note "ANTIVIVISECTIONISTS Note #10." and check title. */
         onNoteInBook(10).perform(click());
-        onView(withId(R.id.fragment_note_title)).check(matches(allOf(withText("Note #10."), isDisplayed())));
+        onView(withId(R.id.title_view)).check(matches(allOf(withText("Note #10."), isDisplayed())));
     }
 
     @Test
-    public void testChangeBookLink() throws IOException {
+    public void testChangeBookLink() {
         Repo repoA = testUtils.setupRepo(RepoType.MOCK, "mock://repo-a");
         Repo repoB = testUtils.setupRepo(RepoType.MOCK, "mock://repo-b");
         testUtils.setupRook(repoA, "mock://repo-a/book-1.org", "Remote content for book in repo a", "abc", 1234567890);
@@ -450,7 +453,7 @@ public class SyncingTest extends OrgzlyTest {
 
         /* Set link to repo-b. */
         onView(allOf(withText("book-1"), isDisplayed())).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_set_link)).perform(click());
         onView(withText("mock://repo-b")).perform(click());
 
@@ -462,12 +465,13 @@ public class SyncingTest extends OrgzlyTest {
                 .check(matches(allOf(withText(containsString(BookSyncStatus.DUMMY_WITH_LINK.msg())), isDisplayed())));
 
         onBook(0).perform(click());
-        onView(withText("Remote content for book in repo b")).check(matches(isDisplayed()));
+        onView(withId(R.id.item_preface_text_view))
+                .check(matches(withText("Remote content for book in repo b")));
         pressBack();
 
         /* Set link to repo-a. */
         onView(allOf(withText("book-1"), isDisplayed())).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_set_link)).perform(click());
         onView(withText("mock://repo-a")).perform(click());
 
@@ -480,7 +484,9 @@ public class SyncingTest extends OrgzlyTest {
 
         /* Still the same content due to conflict. */
         onBook(0).perform(click());
-        onView(withText("Remote content for book in repo b")).check(matches(isDisplayed()));
+
+        onView(allOf(withId(R.id.item_preface_text_view), withText("Remote content for book in repo b")))
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -503,17 +509,20 @@ public class SyncingTest extends OrgzlyTest {
                 .check(matches(allOf(withText(containsString(BookSyncStatus.DUMMY_WITHOUT_LINK_AND_ONE_ROOK.msg())), isDisplayed())));
 
         onBook(0).perform(click());
-        onView(withText("Local content for book 1")).check(matches(isDisplayed()));
+        onView(withId(R.id.item_preface_text_view))
+                .check(matches(withText("Local content for book 1")));
         pressBack();
         onBook(1).perform(click());
-        onView(withText("Local content for book 2")).check(matches(isDisplayed()));
+        onView(withId(R.id.item_preface_text_view))
+                .check(matches(withText("Local content for book 2")));
         pressBack();
         /* Whole notebook view is too big to fit on small devices' screen, so we get
          * "at least 90 percent of the view's area is displayed to the user"
          * when trying to click on it. Clicking on specific view inside (book name) instead.
          */
         onBook(2, R.id.item_book_title).perform(click());
-        onView(withText("Remote content for book 3")).check(matches(isDisplayed()));
+        onView(withId(R.id.item_preface_text_view))
+                .check(matches(withText("Remote content for book 3")));
         pressBack();
 
         sync();
@@ -528,13 +537,18 @@ public class SyncingTest extends OrgzlyTest {
                 .check(matches(allOf(withText(containsString(BookSyncStatus.NO_CHANGE.msg())), isDisplayed())));
 
         onBook(0).perform(click());
-        onView(withText("Local content for book 1")).check(matches(isDisplayed()));
+        onView(withId(R.id.item_preface_text_view))
+                .check(matches(withText("Local content for book 1")));
         pressBack();
+
         onBook(1).perform(click());
-        onView(withText("Local content for book 2")).check(matches(isDisplayed()));
+        onView(withId(R.id.item_preface_text_view))
+                .check(matches(withText("Local content for book 2")));
         pressBack();
+
         onBook(2).perform(click());
-        onView(withText("Remote content for book 3")).check(matches(isDisplayed()));
+        onView(withId(R.id.item_preface_text_view))
+                .check(matches(withText("Remote content for book 3")));
     }
 
     @Test
@@ -586,7 +600,7 @@ public class SyncingTest extends OrgzlyTest {
         clickSetting("pref_key_repos", R.string.repos_preference_title);
         onListItem(0).perform(click());
         onView(withId(R.id.activity_repo_dropbox_directory)).perform(replaceTextCloseKeyboard("repo-b"));
-        onActionItemClick(R.id.done, R.string.done);
+        onView(withId(R.id.fab)).perform(click()); // Repo done
         pressBack();
         pressBack();
         pressBack();
@@ -595,7 +609,7 @@ public class SyncingTest extends OrgzlyTest {
         onView(withId(R.id.drawer_layout)).perform(open());
         onView(allOf(withText(R.string.notebooks), isDescendantOfA(withId(R.id.drawer_navigation_view)))).perform(click());
         onView(allOf(withText("booky"), isDisplayed())).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_set_link)).perform(click());
         onView(withText("dropbox:/repo-b")).perform(click());
 
@@ -611,7 +625,7 @@ public class SyncingTest extends OrgzlyTest {
                 .check(matches(not(isDisplayed())));
 
         onView(allOf(withText("booky"), isDisplayed())).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_set_link)).perform(click());
         onView(withText("dropbox:/repo-b")).check(matches(isDisplayed())); // Current value
     }
@@ -626,7 +640,7 @@ public class SyncingTest extends OrgzlyTest {
         ActivityScenario.launch(MainActivity.class);
 
         onView(allOf(withText("booky"), isDisplayed())).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_set_link)).perform(click());
         onView(withText("mock://repo-a")).perform(click());
 
@@ -638,10 +652,10 @@ public class SyncingTest extends OrgzlyTest {
         clickSetting("pref_key_repos", R.string.repos_preference_title);
         onListItem(0).perform(click());
         onView(withId(R.id.activity_repo_dropbox_directory)).perform(replaceTextCloseKeyboard("repo-1"));
-        onActionItemClick(R.id.done, R.string.done);
+        onView(withId(R.id.fab)).perform(click()); // Repo done
         onListItem(0).perform(click());
         onView(withId(R.id.activity_repo_dropbox_directory)).perform(replaceTextCloseKeyboard("repo-2"));
-        onActionItemClick(R.id.done, R.string.done);
+        onView(withId(R.id.fab)).perform(click()); // Repo done
         pressBack();
         pressBack();
         pressBack();
@@ -661,7 +675,7 @@ public class SyncingTest extends OrgzlyTest {
         onBook(0, R.id.item_book_link_repo).check(matches(allOf(withText("mock://repo-a"), isDisplayed())));
 
         onView(allOf(withText("booky"), isDisplayed())).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_set_link)).perform(click());
         onView(withText(R.string.remove_notebook_link)).perform(click());
 
@@ -680,7 +694,7 @@ public class SyncingTest extends OrgzlyTest {
         onBook(0, R.id.item_book_last_action).check(matches(withText(containsString("Loaded from mock://repo-a/booky.org.txt"))));
 
         onView(allOf(withText("booky"), isDisplayed())).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_set_link)).perform(click());
         onView(withText("mock://repo-a")).perform(click());
 
@@ -689,9 +703,10 @@ public class SyncingTest extends OrgzlyTest {
     }
 
     @Test
-    public void testSpaceSeparatedBookName() throws IOException {
+    public void testSpaceSeparatedBookName() {
         Repo repo = testUtils.setupRepo(RepoType.MOCK, "mock://repo-a");
         testUtils.setupRook(repo, "mock://repo-a/Book%20Name.org", "", "1abcdef", 1400067155);
+
         ActivityScenario.launch(MainActivity.class);
 
         sync();
@@ -712,13 +727,14 @@ public class SyncingTest extends OrgzlyTest {
 
         onBook(0).perform(click()); // Open notebook
         onNoteInBook(1).perform(click()); // Open note
-        onView(withId(R.id.fragment_note_title)).perform(replaceTextCloseKeyboard("New title"));
-        onView(withId(R.id.done)).perform(click());
+        onView(withId(R.id.title)).perform(click());
+        onView(withId(R.id.title_edit)).perform(replaceTextCloseKeyboard("New title"));
+        onView(withId(R.id.done)).perform(click()); // Note done
 
         pressBack(); // Back to the list of notebooks
 
         onBook(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.books_context_menu_item_rename)).perform(click());
         onView(withId(R.id.name)).perform(replaceTextCloseKeyboard("book-two"));
         onView(withText(R.string.rename)).perform(click());
@@ -750,7 +766,8 @@ public class SyncingTest extends OrgzlyTest {
 
         onNoteInBook(1).perform(longClick());
 
-        onView(withId(R.id.action_bar_title)).check(matches(withText("1")));
+        onView(allOf(instanceOf(TextView.class), withParent(withId(R.id.top_toolbar))))
+                .check(matches(withText("1")));
 
         testUtils.setupRook(
                 repo,
@@ -760,13 +777,13 @@ public class SyncingTest extends OrgzlyTest {
                 1520681916000L);
 
         // Sync by starting the service directly, to keep note selected
-        Intent intent = new Intent(context, SyncService.class);
-        intent.setAction(AppIntent.ACTION_SYNC_START);
-        context.startService(intent);
+        SyncRunner.startSync();
         SystemClock.sleep(1000);
 
         onNotesInBook().check(matches(recyclerViewItemCount(2)));
-        onView(withId(R.id.action_bar_title)).check(doesNotExist());
+
+        onView(allOf(instanceOf(TextView.class), withParent(withId(R.id.top_toolbar))))
+                .check(matches(withText("book-a")));
     }
 
     @Test
@@ -781,7 +798,7 @@ public class SyncingTest extends OrgzlyTest {
 
         onView(allOf(withText("booky"), isDisplayed())).check(matches(isDisplayed()));
         onBook(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.delete)).perform(click());
         onView(withId(R.id.delete_linked_checkbox)).perform(click());
         onView(withText(R.string.delete)).perform(click());
@@ -797,7 +814,7 @@ public class SyncingTest extends OrgzlyTest {
 
         onView(allOf(withText("booky"), isDisplayed())).check(matches(isDisplayed()));
         onBook(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.delete)).perform(click());
         onView(withId(R.id.delete_linked_checkbox)).perform(click());
         onView(withText(R.string.delete)).perform(click());

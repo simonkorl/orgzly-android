@@ -3,7 +3,6 @@
 <manifest
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    package="com.orgzly"
     android:installLocation="auto">
 
     <!-- Initially added for Dropbox sync. -->
@@ -12,8 +11,10 @@
     <!-- Initially added for checking available connections (for sync). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 
-    <!-- Required for: exporting files (Downloads), creating temporary files -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <!-- For BroadcastReceiver below -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
@@ -21,21 +22,23 @@
     <!-- For reminders -->
     <uses-permission android:name="android.permission.VIBRATE"/>
 
-    <!-- For sync -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- For reminders -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
     <application
         android:name=".android.App"
         android:allowBackup="true"
         android:networkSecurityConfig="@xml/network_security_config" tools:targetApi="n"
         android:supportsRtl="true"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:icon="@mipmap/cic_launcher"
         android:label="@string/app_name"
         android:theme="@style/AppLightTheme.Light"
-        android:fullBackupContent="@xml/backup_config">
+        android:fullBackupContent="@xml/backup_config"
+        android:requestLegacyExternalStorage="true">
 
-        <activity android:name=".android.ui.LauncherActivity">
+        <!-- <profileable android:shell="true" tools:targetApi="q" /> -->
+
+        <activity android:name=".android.ui.LauncherActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -50,10 +53,17 @@
             android:name=".android.ui.main.MainActivity"
             android:windowSoftInputMode="stateAlwaysHidden"
             android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="org-protocol" />
+            </intent-filter>
         </activity>
 
         <activity
             android:name=".android.ui.share.ShareActivity"
+            android:exported="true"
             android:windowSoftInputMode="stateUnchanged"
             android:excludeFromRecents="true"
             android:taskAffinity="">
@@ -74,7 +84,7 @@
 
             <meta-data
                 android:name="android.service.chooser.chooser_target_service"
-                android:value=".android.ChooserShareTargetService" />
+                android:value="androidx.sharetarget.ChooserTargetServiceCompat" />
         </activity>
 
         <activity
@@ -89,11 +99,12 @@
 
         <activity
             android:name=".android.ui.repo.dropbox.DropboxRepoActivity"
-            android:windowSoftInputMode="stateAlwaysHidden">
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize">
         </activity>
 
         <activity
             android:name="com.dropbox.core.android.AuthActivity"
+            android:exported="true"
             android:configChanges="orientation|keyboard"
             android:launchMode="singleTask">
             <intent-filter>
@@ -108,17 +119,17 @@
 
         <activity
             android:name=".android.ui.repo.git.GitRepoActivity"
-            android:windowSoftInputMode="stateAlwaysHidden">
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize">
         </activity>
 
         <activity
             android:name=".android.ui.repo.webdav.WebdavRepoActivity"
-            android:windowSoftInputMode="stateAlwaysHidden">
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize">
         </activity>
 
         <activity
             android:name=".android.ui.repo.directory.DirectoryRepoActivity"
-            android:windowSoftInputMode="stateAlwaysHidden">
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize">
         </activity>
 
         <activity
@@ -129,7 +140,8 @@
         <activity
             android:name=".android.ui.BookChooserActivity"
             android:label="@string/book_shortcut_label"
-            android:icon="@mipmap/cic_shortcut_notebook">
+            android:icon="@mipmap/cic_shortcut_notebook"
+            android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.CREATE_SHORTCUT" />
@@ -140,7 +152,8 @@
         <activity
             android:name=".android.ui.TemplateChooserActivity"
             android:label="@string/new_note_shortcut_label"
-            android:icon="@mipmap/cic_shortcut_new_note">
+            android:icon="@mipmap/cic_shortcut_new_note"
+            android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.CREATE_SHORTCUT" />
@@ -163,30 +176,10 @@
             android:name=".android.ui.SyncShortcutActivity"
             android:taskAffinity="" />
 
-        <service
-            android:name=".android.sync.SyncService"
-            android:exported="true" />
-
-        <service
-            android:name=".android.NotificationActionService"
-            android:permission="android.permission.BIND_JOB_SERVICE"/>
-
-        <service
-            android:name=".android.reminders.ReminderService"
-            android:permission="android.permission.BIND_JOB_SERVICE"/>
-
-        <service
-            android:name=".android.usecase.UseCaseService"
-            android:permission="android.permission.BIND_JOB_SERVICE"/>
-
-        <service
-            android:name=".android.ChooserShareTargetService"
-            android:label="@string/share_target_service"
-            android:permission="android.permission.BIND_CHOOSER_TARGET_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.chooser.ChooserTargetService" />
-            </intent-filter>
-        </service>
+        <activity
+            android:name=".android.ui.logs.AppLogsActivity"
+            android:exported="false"
+            android:label="@string/logs" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -200,7 +193,8 @@
 
         <receiver
             android:name=".android.widgets.ListWidgetProvider"
-            android:label="@string/list_widget_name">
+            android:label="@string/list_widget_name"
+            android:exported="true">
 
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -211,7 +205,13 @@
                 android:resource="@xml/list_widget_info" />
         </receiver>
 
-        <receiver android:name=".android.BootCompletedReceiver">
+        <receiver android:name=".android.BootCompletedReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+
+        <receiver android:name=".android.reminders.RemindersBroadcastReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
@@ -221,16 +221,15 @@
 
         <receiver android:name=".android.NewNoteBroadcastReceiver"/>
 
-        <receiver android:name=".android.TimeChangeBroadcastReceiver">
+        <receiver android:name=".android.TimeChangeBroadcastReceiver" android:exported="false">
             <intent-filter>
-                <!--<action android:name="android.intent.action.TIME_SET"/>-->
+                <action android:name="android.intent.action.TIME_SET"/>
                 <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
             </intent-filter>
         </receiver>
 
         <receiver
             android:name=".android.ActionReceiver"
-            android:exported="true"
-            tools:ignore="ExportedReceiver" />
+            android:exported="true" tools:ignore="ExportedReceiver" />
     </application>
 </manifest>

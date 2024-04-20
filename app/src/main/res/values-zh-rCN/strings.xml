@@ -26,7 +26,6 @@
     <string name="delete">删除</string>
     <string name="delete_with_quoted_argument">删除 “%s”</string>
     <string name="name">名称</string>
-    <string name="value">值</string>
     <string name="query">查询</string>
     <string name="done">完成</string>
     <string name="mark_as_done">标记为完成</string>
@@ -155,8 +154,9 @@
     <string name="searches">搜索</string>
     <string name="search">搜索</string>
     <string name="new_search">新建搜索</string>
-    <string name="no_repos">无已配置的存储库</string>
     <string name="multiple_repos">存在多个存储库</string>
+    <string name="no_repos">无已配置的存储库</string>
+    <string name="no_books">未找到笔记本</string>
     <string name="book_encoding">笔记本编码</string>
     <string name="collecting_notebooks_in_progress">收藏笔记本...</string>
     <string name="syncing_in_progress">正在同步…</string>
@@ -168,9 +168,13 @@
     <string name="directory">目录</string>
     <string name="fragment_repo_dropbox_directory_desc">Dropbox中的目录 (例如 “/Documents/Orgzly”)</string>
     <string name="directory_uri">目录 URI</string>
+    <string name="git_clone_progress">克隆存储库</string>
+    <string name="git_verifying_settings">确保存储库设置工作。</string>
     <string name="git_url_hint">远程地址（例如 git@github.com:orgzly/orgzly-android.git）</string>
     <string name="git_directory_hint">目录位置（例如 “file:/sdcard/orgzly”）</string>
     <string name="git_ssh_key_hint">SSH 密钥位置（例如 “file:/sdcard/id_rsa”）</string>
+    <string name="git_https_username_hint">用户名</string>
+    <string name="git_https_password_hint">密码</string>
     <string name="git_author_hint">作者（例如 John Doe）</string>
     <string name="git_email_hint">电子邮件（例如 john@email.com）</string>
     <string name="git_branch_hint">分支（例如 master）</string>
@@ -275,6 +279,10 @@
     <string name="notebooks_sort_order">笔记本排序方式</string>
     <string name="font_size">字体大小</string>
     <string name="color_scheme">颜色主题</string>
+    <string name="other">其他</string>
+    <string name="theme">主题</string>
+    <string name="light_scheme">明亮配色方案</string>
+    <string name="dark_scheme">暗色方案</string>
     <string name="monospaced_font">等宽字体</string>
     <string name="monospaced_font_summary">为笔记内容和笔记本序言使用等宽字体</string>
     <string name="reversed_note_click_action">反转笔记点击动作</string>
@@ -341,6 +349,8 @@
     <string name="displayed_book_details_used_encoding">已使用编码</string>
     <string name="displayed_book_details_last_action">最后的操作</string>
     <string name="displayed_book_details_notes_count">笔记数量</string>
+    <string name="color_scheme_system">系统</string>
+    <string name="color_scheme_dynamic">动态颜色</string>
     <string name="color_scheme_light">亮</string>
     <string name="color_scheme_dark">暗</string>
     <string name="color_scheme_black">黑色</string>
@@ -426,6 +436,7 @@
     <string name="list_widget_nothing_selected">未选择搜索</string>
     <string name="auto_sync">自动同步</string>
     <string name="auto_sync_experimental_summary">仅用于本地存储库</string>
+    <string name="auto_sync_summary">不支持 Dropbox</string>
     <string name="auto_sync_warning">根据所选选项，同步可能被经常触发。如果笔记本被修改，它的全部内容会与存储库保持双向同步。当同步正在进行时，某些操作可能会被延迟。</string>
     <string name="pref_title_sync_after_note_create">笔记已创建</string>
     <string name="pref_summary_sync_after_note_create">新建笔记后同步</string>
@@ -497,6 +508,8 @@
     <string name="display_inline_images_summary">在笔记中显示图片</string>
     <string name="scale_down_to_width">按比例缩小到一定宽度</string>
     <string name="scale_down_to_width_summary">按比例缩小图片到指定宽度</string>
+    <string name="file_absolute_root">绝对链接的根目录（例如：file:/readme.txt）</string>
+    <string name="file_relative_root">相对链接的根目录（例如：file:readme.txt）</string>
     <string name="argument_used">已使用：%s</string>
     <string name="argument_detected">检测到 %s</string>
     <string name="argument_selected">已选择 %s</string>
@@ -545,4 +558,17 @@
     <string name="overdue">过期</string>
     <string name="help">帮助</string>
     <string name="content">内容</string>
+    <string name="prepend">前缀</string>
+    <string name="insert_new_note_at_beginning">在开头插入新笔记</string>
+    <string name="developer_options">开发者选项</string>
+    <string name="git_repository_type">Git 仓库类型</string>
+    <string name="in_development">开发中</string>
+    <string name="select_notebook">选择笔记本</string>
+    <string name="highlight_rich_text_being_edited">高亮正被编辑的富文本</string>
+    <string name="use_alarm_clock_for_tod_reminders">使用闹钟</string>
+    <string name="use_alarm_clock_for_tod_reminders_summary">对于设置了几点几分的提醒</string>
+    <string name="log_major_events">记录重要事件</string>
+    <string name="logs">日志</string>
+    <string name="share">分享</string>
+    <string name="refresh_data">刷新</string>
 </resources>

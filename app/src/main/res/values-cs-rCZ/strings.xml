@@ -26,7 +26,6 @@
     <string name="delete">Smazat</string>
     <string name="delete_with_quoted_argument">Odstranit “%s”</string>
     <string name="name">Název</string>
-    <string name="value">Hodnota</string>
     <string name="query">Dotaz</string>
     <string name="done">Dokončeno</string>
     <string name="mark_as_done">Označit jako dokončeno</string>
@@ -164,8 +163,9 @@
     <string name="searches">Vyhledávání</string>
     <string name="search">Hledat</string>
     <string name="new_search">Nové hledání</string>
-    <string name="no_repos">Nebyly konfigurovány žádné repozitáře</string>
     <string name="multiple_repos">Existuje více úložišť</string>
+    <string name="no_repos">Nebyly konfigurovány žádné repozitáře</string>
+    <string name="no_books">Nebyly nalezeny žádné sešity</string>
     <string name="book_encoding">Znaková sada sešitu</string>
     <string name="collecting_notebooks_in_progress">Shromažďuji sešity…</string>
     <string name="syncing_in_progress">Synchronizuji…</string>
@@ -177,9 +177,13 @@
     <string name="directory">Adresář</string>
     <string name="fragment_repo_dropbox_directory_desc">Adresář v Dropboxu (např. “/Documents/Orgzly“)</string>
     <string name="directory_uri">URI složky</string>
+    <string name="git_clone_progress">Klonování repozitáře</string>
+    <string name="git_verifying_settings">Kontroluji nastavení repozitáře.</string>
     <string name="git_url_hint">Vzdálená adresa (například git@github.com:orgzly / orgzly-android.git)</string>
     <string name="git_directory_hint">Umístění slozky (například \"file:/sdcard/orgzly\")</string>
     <string name="git_ssh_key_hint">Umístění SSH klíče (například \"file:/sdcard/id_rsa\")</string>
+    <string name="git_https_username_hint">Uživatelské jméno</string>
+    <string name="git_https_password_hint">Heslo</string>
     <string name="git_author_hint">Autor (např. Jan Novák)</string>
     <string name="git_email_hint">Email (např. john@email.com)</string>
     <string name="git_branch_hint">Větev (např. master)</string>
@@ -284,6 +288,10 @@
     <string name="notebooks_sort_order">Pořadí sešitů</string>
     <string name="font_size">Velikost písma</string>
     <string name="color_scheme">Barevné téma</string>
+    <string name="other">Ostatní</string>
+    <string name="theme">Vzhled</string>
+    <string name="light_scheme">Světlý vzhled</string>
+    <string name="dark_scheme">Tmavý vzhled</string>
     <string name="monospaced_font">Neproporcionální písmo</string>
     <string name="monospaced_font_summary">Použít neproporcionální písmo pro obsah poznámky a úvod sešitu</string>
     <string name="reversed_note_click_action">Zaměnit akci kliknutí a přidržení poznámky</string>
@@ -350,6 +358,8 @@
     <string name="displayed_book_details_used_encoding">Užívané kódování</string>
     <string name="displayed_book_details_last_action">Poslední akce</string>
     <string name="displayed_book_details_notes_count">Počet poznámek</string>
+    <string name="color_scheme_system">Systém</string>
+    <string name="color_scheme_dynamic">Dynamický vzhled</string>
     <string name="color_scheme_light">Světlé</string>
     <string name="color_scheme_dark">Tmavé</string>
     <string name="color_scheme_black">Černé</string>
@@ -441,6 +451,7 @@
     <string name="list_widget_nothing_selected">Žádné hledání není vybráno</string>
     <string name="auto_sync">Automatická synchronizace</string>
     <string name="auto_sync_experimental_summary">Použít pouze pro lokální úložiště</string>
+    <string name="auto_sync_summary">Nepodporováno pro Dropbox</string>
     <string name="auto_sync_warning">V závislosti na nastavených kritériích se synchronizace může spouštět velmi často. Při úpravě sešitu je tento celý přenášen z/do úložiště. Díky tomu mohou být některé akce opožděny po dobu trvání synchronizace.</string>
     <string name="pref_title_sync_after_note_create">Poznámka vytvořena</string>
     <string name="pref_summary_sync_after_note_create">Synchronizovat po vytvoření nové poznámky</string>
@@ -524,6 +535,8 @@
     <string name="display_inline_images_summary">Zobrazovat obrázky v poznámkách</string>
     <string name="scale_down_to_width">Přizpůsobit na šířku</string>
     <string name="scale_down_to_width_summary">Přizpůsobit na danou šířku</string>
+    <string name="file_absolute_root">Kořenová adresa pro absolutní odkazy (např. file:/readme.txt)</string>
+    <string name="file_relative_root">Kořenová adresa pro relativní odkazy (např. file:/readme.txt)</string>
     <string name="argument_used">%s použito</string>
     <string name="argument_detected">%s detekováno</string>
     <string name="argument_selected">%s vybráno</string>
@@ -578,4 +591,17 @@
     <string name="overdue">Po termínu</string>
     <string name="help">Nápověda</string>
     <string name="content">Obsah</string>
+    <string name="prepend">Přidat před</string>
+    <string name="insert_new_note_at_beginning">Vložit novou poznámku na začátek</string>
+    <string name="developer_options">Možnosti pro vývojáře</string>
+    <string name="git_repository_type">Typ Git repozitáře</string>
+    <string name="in_development">Ve vývoji</string>
+    <string name="select_notebook">Vybrat sešit</string>
+    <string name="highlight_rich_text_being_edited">Zvýraznit upravovaný rich text formát</string>
+    <string name="use_alarm_clock_for_tod_reminders">Použít budík</string>
+    <string name="use_alarm_clock_for_tod_reminders_summary">Pro připomenutí s nastaveným časem</string>
+    <string name="log_major_events">Zaznamenávat důležité události</string>
+    <string name="logs">Logy</string>
+    <string name="share">Sdílet</string>
+    <string name="refresh_data">Obnovit</string>
 </resources>

@@ -1,24 +1,5 @@
 package com.orgzly.android.espresso;
 
-import android.app.Activity;
-import android.app.Instrumentation.ActivityResult;
-import android.content.Intent;
-
-import androidx.documentfile.provider.DocumentFile;
-import androidx.test.core.app.ActivityScenario;
-import androidx.test.espresso.intent.Intents;
-
-import com.orgzly.R;
-import com.orgzly.android.BookFormat;
-import com.orgzly.android.OrgzlyTest;
-import com.orgzly.android.ui.main.MainActivity;
-
-import org.junit.Before;
-import org.junit.Test;
-
-import java.io.File;
-import java.io.IOException;
-
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
@@ -34,16 +15,39 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isEnabled;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
-import static com.orgzly.android.espresso.EspressoUtils.onActionItemClick;
-import static com.orgzly.android.espresso.EspressoUtils.onBook;
-import static com.orgzly.android.espresso.EspressoUtils.onNoteInBook;
-import static com.orgzly.android.espresso.EspressoUtils.onSnackbar;
-import static com.orgzly.android.espresso.EspressoUtils.openContextualToolbarOverflowMenu;
-import static com.orgzly.android.espresso.EspressoUtils.replaceTextCloseKeyboard;
+import static com.orgzly.android.espresso.util.EspressoUtils.contextualToolbarOverflowMenu;
+import static com.orgzly.android.espresso.util.EspressoUtils.onActionItemClick;
+import static com.orgzly.android.espresso.util.EspressoUtils.onBook;
+import static com.orgzly.android.espresso.util.EspressoUtils.onNoteInBook;
+import static com.orgzly.android.espresso.util.EspressoUtils.onSnackbar;
+import static com.orgzly.android.espresso.util.EspressoUtils.replaceTextCloseKeyboard;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
+import static org.junit.Assume.assumeTrue;
+
+import android.app.Activity;
+import android.app.Instrumentation.ActivityResult;
+import android.content.Intent;
+
+import androidx.documentfile.provider.DocumentFile;
+import androidx.test.core.app.ActivityScenario;
+import androidx.test.espresso.intent.Intents;
+import androidx.test.platform.app.InstrumentationRegistry;
+import androidx.test.uiautomator.UiDevice;
+
+import com.orgzly.R;
+import com.orgzly.android.BookFormat;
+import com.orgzly.android.OrgzlyTest;
+import com.orgzly.android.ui.main.MainActivity;
+
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Test;
+
+import java.io.File;
+import java.io.IOException;
 
 public class BooksTest extends OrgzlyTest {
     @Before
@@ -93,54 +97,51 @@ public class BooksTest extends OrgzlyTest {
     @Test
     public void testReturnToNonExistentBookByPressingBack() {
         onView(allOf(withText("book-1"), withId(R.id.item_book_title))).perform(click());
+
         onView(withId(R.id.drawer_layout)).perform(open());
         onView(withText(R.string.notebooks)).perform(click());
         onView(allOf(withText("book-1"), withId(R.id.item_book_title))).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.delete)).perform(click());
         onView(withText(R.string.delete)).perform(click());
         pressBack();
+
         onView(withId(R.id.fragment_book_view_flipper)).check(matches(isDisplayed()));
         onView(withText(R.string.book_does_not_exist_anymore)).check(matches(isDisplayed()));
         onView(withId(R.id.fab)).check(matches(not(isDisplayed())));
         pressBack();
+
         onView(withId(R.id.fragment_books_view_flipper)).check(matches(isDisplayed()));
         onView(allOf(withText("book-2"), withId(R.id.item_book_title))).perform(click());
         onView(allOf(withText(R.string.book_does_not_exist_anymore), isDisplayed())).check(doesNotExist());
     }
 
     @Test
-    public void testEnterPrefaceForNonExistentBook() {
-        onView(allOf(withText("book-1"), withId(R.id.item_book_title))).perform(click());
-
-        onView(withId(R.id.drawer_layout)).perform(open());
-        onView(withText(R.string.notebooks)).perform(click());
-
-        onView(allOf(withText("book-1"), withId(R.id.item_book_title))).perform(longClick());
-        openContextualToolbarOverflowMenu();
-        onView(withText(R.string.delete)).perform(click());
-        onView(withText(R.string.delete)).perform(click());
-        pressBack();
-
-        onView(withId(R.id.fragment_book_view_flipper)).check(matches(isDisplayed()));
-        onView(withText(R.string.book_does_not_exist_anymore)).check(matches(isDisplayed()));
-
-        openContextualToolbarOverflowMenu();
-        onView(withText(R.string.edit_book_preface)).check(doesNotExist());
+    @Ignore("Debugging")
+    public void testJustExport() {
+        onBook(0).perform(longClick());
+        contextualToolbarOverflowMenu().perform(click());
+        onView(withText(R.string.export)).perform(click());
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressEnter();
     }
 
     @Test
-    public void testExport() throws IOException {
-//        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-//            testExportQ();
-//        } else {
-            testExportPreQ();
-//        }
+    public void testCancelExportFileSelection() {
+        onBook(0).perform(longClick());
+        contextualToolbarOverflowMenu().perform(click());
+        onView(withText(R.string.export)).perform(click());
+        for (int i = 1; i < 10; i++) {
+            UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack();
+        }
     }
 
-    private void testExportQ() {
+    @Test
+    public void testExportWithFakeResponse() {
+        // Only if DocumentsProvider is supported
+        assumeTrue(android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT);
+
         onBook(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
 
         Intents.init();
 
@@ -166,9 +167,13 @@ public class BooksTest extends OrgzlyTest {
         Intents.release();
     }
 
-    private void testExportPreQ() throws IOException {
+    @Test
+    public void testExport() throws IOException {
+        // Older API versions, when file is saved in Download/
+        assumeTrue(android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.KITKAT);
+
         onBook(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.export)).perform(click());
         onSnackbar().check(matches(withText(startsWith(context.getString(R.string.book_exported, "")))));
         localStorage.getExportFile("book-1", BookFormat.ORG).delete();
@@ -201,7 +206,7 @@ public class BooksTest extends OrgzlyTest {
         onView(allOf(withText("book-created-from-scratch"), isDisplayed())).check(matches(isDisplayed()));
 
         onBook(3).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.delete)).perform(click());
         onView(withText(R.string.delete)).perform(click());
 
@@ -211,10 +216,10 @@ public class BooksTest extends OrgzlyTest {
     @Test
     public void testDifferentBookLoading() {
         onView(allOf(withText("book-1"), isDisplayed())).perform(click());
-        onNoteInBook(1, R.id.item_head_title).check(matches(withText("Note A.")));
+        onNoteInBook(1, R.id.item_head_title_view).check(matches(withText("Note A.")));
         pressBack();
         onView(allOf(withText("book-2"), isDisplayed())).perform(click());
-        onNoteInBook(1, R.id.item_head_title).check(matches(withText("Note #1.")));
+        onNoteInBook(1, R.id.item_head_title_view).check(matches(withText("Note #1.")));
     }
 
     @Test
@@ -225,7 +230,7 @@ public class BooksTest extends OrgzlyTest {
         onView(withText(R.string.notebooks)).perform(click());
 
         onBook(1).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.delete)).perform(click());
         onView(withText(R.string.delete)).perform(click());
     }
@@ -255,7 +260,7 @@ public class BooksTest extends OrgzlyTest {
     @Test
     public void testRenameBookToExistingName() {
         onBook(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.rename)).perform(click());
         onView(withId(R.id.name)).perform(replaceTextCloseKeyboard("book-2"));
         onView(withText(R.string.rename)).perform(click());
@@ -266,7 +271,7 @@ public class BooksTest extends OrgzlyTest {
     @Test
     public void testRenameBookToSameName() {
         onBook(0).perform(longClick());
-        openContextualToolbarOverflowMenu();
+        contextualToolbarOverflowMenu().perform(click());
         onView(withText(R.string.rename)).perform(click());
         onView(withText(R.string.rename)).check(matches(not(isEnabled())));
     }
@@ -279,5 +284,17 @@ public class BooksTest extends OrgzlyTest {
                 .check(matches(withText(context.getResources().getQuantityString(R.plurals.notes_count_nonzero, 10, 10))));
         onBook(2, R.id.item_book_note_count)
                 .check(matches(withText(R.string.notes_count_zero)));
+    }
+
+    @Test
+    public void testBackPressClosesSelectionMenu() {
+        // Select book
+        onBook(0).perform(longClick());
+
+        // Press back
+        pressBack();
+
+        // Make sure we're still in the app
+        onBook(0, R.id.item_book_title).check(matches(withText("book-1")));
     }
 }

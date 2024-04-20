@@ -80,7 +80,7 @@ class StatesPreferenceFragment : PreferenceDialogFragmentCompat() {
         val context = context
 
         for (keyword in ArrayListSpaceSeparated(keywords)) {
-            val upper = keyword.toUpperCase()
+            val upper = keyword.uppercase()
 
             if (seenKeywords.contains(upper)) {
                 if (context != null) {
@@ -103,7 +103,7 @@ class StatesPreferenceFragment : PreferenceDialogFragmentCompat() {
             )
 
             val value = workflow.toString()
-            AppPreferences.states(context!!, value)
+            AppPreferences.states(requireContext(), value)
             preference.summary = value
         }
     }
@@ -112,13 +112,11 @@ class StatesPreferenceFragment : PreferenceDialogFragmentCompat() {
         val FRAGMENT_TAG: String = StatesPreferenceFragment::class.java.name
 
         fun getInstance(preference: Preference): PreferenceDialogFragmentCompat {
-            val fragment = StatesPreferenceFragment()
-
-            fragment.arguments = Bundle().apply {
-                putString("key", preference.key)
+            return StatesPreferenceFragment().apply {
+                arguments = Bundle(1).apply {
+                    putString(ARG_KEY, preference.key)
+                }
             }
-
-            return fragment
         }
     }
 }

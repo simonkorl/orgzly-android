@@ -1,31 +1,26 @@
 package com.orgzly.android.ui.savedsearch;
 
-import android.app.Activity;
 import android.content.Context;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentActivity;
-import androidx.lifecycle.ViewModelProviders;
+import androidx.lifecycle.ViewModelProvider;
 
 import com.orgzly.BuildConfig;
 import com.orgzly.R;
 import com.orgzly.android.App;
 import com.orgzly.android.data.DataRepository;
 import com.orgzly.android.db.entity.SavedSearch;
+import com.orgzly.android.ui.CommonFragment;
 import com.orgzly.android.ui.drawer.DrawerItem;
 import com.orgzly.android.ui.main.SharedMainActivityViewModel;
 import com.orgzly.android.ui.savedsearches.SavedSearchesFragment;
-import com.orgzly.android.ui.util.ActivityUtils;
+import com.orgzly.android.ui.util.KeyboardUtils;
 import com.orgzly.android.util.LogUtils;
 import com.orgzly.databinding.FragmentSavedSearchBinding;
 
@@ -33,7 +28,7 @@ import java.util.List;
 
 import javax.inject.Inject;
 
-public class SavedSearchFragment extends Fragment implements DrawerItem {
+public class SavedSearchFragment extends CommonFragment implements DrawerItem {
     private static final String TAG = SavedSearchFragment.class.getName();
 
     private static final String ARG_ID = "id";
@@ -78,10 +73,8 @@ public class SavedSearchFragment extends Fragment implements DrawerItem {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        sharedMainActivityViewModel = ViewModelProviders.of(requireActivity())
+        sharedMainActivityViewModel = new ViewModelProvider(requireActivity())
                 .get(SharedMainActivityViewModel.class);
-
-        setHasOptionsMenu(true);
     }
 
     @Override
@@ -93,6 +86,8 @@ public class SavedSearchFragment extends Fragment implements DrawerItem {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+
         View viewToFocus = null;
 
         if (isEditingExistingFilter()) { /* Existing filter. */
@@ -120,10 +115,27 @@ public class SavedSearchFragment extends Fragment implements DrawerItem {
          * Open a soft keyboard.
          * For new filters focus on name, for existing focus on query.
          */
-        Activity activity = getActivity();
-        if (viewToFocus != null && activity != null) {
-            ActivityUtils.openSoftKeyboardWithDelay(activity, viewToFocus);
+        if (viewToFocus != null) {
+            KeyboardUtils.openSoftKeyboard(viewToFocus);
         }
+
+        topToolbarToDefault();
+    }
+
+    private void topToolbarToDefault() {
+        binding.topToolbar.setNavigationOnClickListener(v -> close());
+
+        binding.topToolbar.setOnMenuItemClickListener(item -> {
+            switch (item.getItemId()) {
+                case R.id.done:
+                    save();
+                    return true;
+            }
+
+            return false;
+        });
+
+        binding.topToolbar.setOnClickListener(v -> binding.scrollView.scrollTo(0, 0));
     }
 
     @Override
@@ -132,15 +144,16 @@ public class SavedSearchFragment extends Fragment implements DrawerItem {
 
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG);
 
-        announceChangesToActivity();
+        sharedMainActivityViewModel.setCurrentFragment(FRAGMENT_TAG);
+
+        sharedMainActivityViewModel.lockDrawer();
     }
 
-    private void announceChangesToActivity() {
-        sharedMainActivityViewModel.setFragment(
-                FRAGMENT_TAG,
-                getString(isEditingExistingFilter() ? R.string.search : R.string.new_search),
-                null,
-                0);
+    @Override
+    public void onPause() {
+        super.onPause();
+
+        sharedMainActivityViewModel.unlockDrawer();
     }
 
     private boolean isEditingExistingFilter() {
@@ -171,41 +184,6 @@ public class SavedSearchFragment extends Fragment implements DrawerItem {
     }
 
     /**
-     * Callback for options menu.
-     */
-    @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, menu, inflater);
-
-        inflater.inflate(R.menu.close_done, menu);
-
-        // Remove search item.
-        menu.removeItem(R.id.activity_action_search);
-    }
-
-    /**
-     * Callback for options menu.
-     */
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.close:
-                if (mListener != null) {
-                    mListener.onSavedSearchCancelRequest();
-                }
-
-                return true;
-
-            case R.id.done:
-                save();
-                return true;
-
-            default:
-                return super.onOptionsItemSelected(item);
-        }
-    }
-
-    /**
      * Sends current values to listener.
      */
     private void save() {
@@ -220,6 +198,12 @@ public class SavedSearchFragment extends Fragment implements DrawerItem {
                     mListener.onSavedSearchCreateRequest(savedSearch);
                 }
             }
+        }
+    }
+
+    private void close() {
+        if (mListener != null) {
+            mListener.onSavedSearchCancelRequest();
         }
     }
 

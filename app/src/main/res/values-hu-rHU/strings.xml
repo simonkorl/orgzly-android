@@ -26,7 +26,6 @@
     <string name="delete">Törlés</string>
     <string name="delete_with_quoted_argument">\"%s\" törlése</string>
     <string name="name">Név</string>
-    <string name="value">Érték</string>
     <string name="query">Lekérdezés</string>
     <string name="done">Kész</string>
     <string name="mark_as_done">Késznek jelölés</string>
@@ -158,8 +157,9 @@
     <string name="searches">Keresések</string>
     <string name="search">Keresés</string>
     <string name="new_search">Új keresés</string>
-    <string name="no_repos">Nincs beállítva tárolóhely</string>
     <string name="multiple_repos">Több tárolóhely is létezik</string>
+    <string name="no_repos">Nincs beállítva tárolóhely</string>
+    <string name="no_books">Nem található jegyzetfüzet</string>
     <string name="book_encoding">Jegyzetfüzet kódolása</string>
     <string name="collecting_notebooks_in_progress">Jegyzetfüzetek összegyűjtése…</string>
     <string name="syncing_in_progress">Szinkronizálás…</string>
@@ -171,9 +171,13 @@
     <string name="directory">Könyvtár</string>
     <string name="fragment_repo_dropbox_directory_desc">Könyvtár a Dropbox-ban (pl. “/Documents/Orgzly”)</string>
     <string name="directory_uri">Könyvtár URI</string>
+    <string name="git_clone_progress">Tároló klónozása</string>
+    <string name="git_verifying_settings">Biztosítsa, hogy a beállított tároló működni fog.</string>
     <string name="git_url_hint">Távoli cím (pl. git@github.com:orgzly/orgzly-android.git)</string>
     <string name="git_directory_hint">Könyvtár helye (pl. “file:/sdcard/orgzly”)</string>
     <string name="git_ssh_key_hint">SSH kulcs helye (pl. “file:/sdcard/id_rsa”)</string>
+    <string name="git_https_username_hint">Felhasználónév</string>
+    <string name="git_https_password_hint">Jelszó</string>
     <string name="git_author_hint">Szerző (pl. Kovács Jenő)</string>
     <string name="git_email_hint">Email (pl. john@email.com)</string>
     <string name="git_branch_hint">Ág (pl. master)</string>
@@ -278,6 +282,10 @@
     <string name="notebooks_sort_order">Jegyzetfüzetek rendezési sorrendje</string>
     <string name="font_size">Betűméret</string>
     <string name="color_scheme">Színséma</string>
+    <string name="other">Egyéb</string>
+    <string name="theme">Színtéma</string>
+    <string name="light_scheme">Világos színtéma</string>
+    <string name="dark_scheme">Sötét színtéma</string>
     <string name="monospaced_font">Rögzített szélességű betűtípus</string>
     <string name="monospaced_font_summary">Rögzített szélességű betűtípussal mutassa a bejegyzések tartalmát és a könyv előszavát</string>
     <string name="reversed_note_click_action">Bejegyzésre koppintás eredményének megfordítása</string>
@@ -344,6 +352,8 @@
     <string name="displayed_book_details_used_encoding">Használt kódolás</string>
     <string name="displayed_book_details_last_action">Utolsó művelet</string>
     <string name="displayed_book_details_notes_count">Bejegyzések száma</string>
+    <string name="color_scheme_system">Rendszer</string>
+    <string name="color_scheme_dynamic">A rendszer szerinti színtéma</string>
     <string name="color_scheme_light">Világos</string>
     <string name="color_scheme_dark">Sötét</string>
     <string name="color_scheme_black">Fekete</string>
@@ -431,6 +441,7 @@
     <string name="list_widget_nothing_selected">Nincs kiválasztott keresés</string>
     <string name="auto_sync">Automatikus szinkronizálás</string>
     <string name="auto_sync_experimental_summary">Csak helyi tárolók esetén</string>
+    <string name="auto_sync_summary">Dropbox esetében nem támogatott</string>
     <string name="auto_sync_warning">Attól függően, hogy melyik lehetőséget választja, szinkronizálás gyakran indulhat. Ha a jegyzetfüzet módosul, annak teljes tartalmát menti vagy betölti. Bizonyos műveletek késhetnek, amíg szinkronizálás van folyamatban.</string>
     <string name="pref_title_sync_after_note_create">Bejegyzés létrehozva</string>
     <string name="pref_summary_sync_after_note_create">Szinkronizálás egy új bejegyzés létrehozásakor</string>
@@ -506,6 +517,8 @@
     <string name="display_inline_images_summary">Képek megjelenítése a bejegyzésekben</string>
     <string name="scale_down_to_width">Lekicsinyítés a szélességhez igazítva</string>
     <string name="scale_down_to_width_summary">Lekicsinyítés megadott szélességhez igazítva</string>
+    <string name="file_absolute_root">Az abszolút hivatkozások gyökérmappája (pl. file:/readme.txt)</string>
+    <string name="file_relative_root">A relatív hivatkozások gyökérmappája (pl. file:/readme.txt)</string>
     <string name="argument_used">%s felhasználva</string>
     <string name="argument_detected">%s észlelve</string>
     <string name="argument_selected">%s kiválasztva</string>
@@ -556,4 +569,17 @@
     <string name="overdue">Lejárt</string>
     <string name="help">Súgó</string>
     <string name="content">Tartalom</string>
+    <string name="prepend">Hozzákapcsol</string>
+    <string name="insert_new_note_at_beginning">Új jegyzet beszúrása az elejére</string>
+    <string name="developer_options">Fejlesztői beállítások</string>
+    <string name="git_repository_type">Git adattároló típusa</string>
+    <string name="in_development">Fejlesztés alatt</string>
+    <string name="select_notebook">Jegyzetfüzet kiválasztása</string>
+    <string name="highlight_rich_text_being_edited">A szerkesztés alatt álló szöveg kiemelése</string>
+    <string name="use_alarm_clock_for_tod_reminders">Használjon ébresztőórát az emlékeztetőkhöz</string>
+    <string name="use_alarm_clock_for_tod_reminders_summary">Használjon ébresztőórát az emlékeztetők összesítő jelentéséhez</string>
+    <string name="log_major_events">Főbb események naplózása</string>
+    <string name="logs">Naplók</string>
+    <string name="share">Megosztás</string>
+    <string name="refresh_data">Adatok frissítése</string>
 </resources>

@@ -10,7 +10,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import com.orgzly.R
 import com.orgzly.android.OrgzlyTest
-import com.orgzly.android.espresso.EspressoUtils.*
+import com.orgzly.android.espresso.util.EspressoUtils.*
 import com.orgzly.android.ui.main.MainActivity
 import org.hamcrest.Matchers.hasToString
 import org.junit.Before
@@ -53,7 +53,7 @@ class BooksSortOrderTest : OrgzlyTest() {
         // Modify book
         onBook(1).perform(click())
         onNoteInBook(1).perform(longClick())
-        onView(withId(R.id.bottom_action_bar_done)).perform(click())
+        onView(withId(R.id.toggle_state)).perform(click())
         pressBack()
         pressBack()
     }

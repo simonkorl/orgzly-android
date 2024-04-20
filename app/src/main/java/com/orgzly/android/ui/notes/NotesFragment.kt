@@ -1,16 +1,17 @@
 package com.orgzly.android.ui.notes
 
-import android.app.AlertDialog
 import android.content.Context
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
-import androidx.appcompat.view.ActionMode
-import androidx.fragment.app.Fragment
+import android.widget.PopupWindow
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import com.orgzly.BuildConfig
 import com.orgzly.R
 import com.orgzly.android.App
 import com.orgzly.android.data.DataRepository
-import com.orgzly.android.ui.ActionModeListener
+import com.orgzly.android.ui.CommonFragment
 import com.orgzly.android.ui.NotePlace
 import com.orgzly.android.ui.SelectableItemAdapter
 import com.orgzly.android.ui.TimeType
@@ -26,10 +27,7 @@ import javax.inject.Inject
  * Fragment which is displaying a list of notes,
  * such as BookFragment, SearchFragment or AgendaFragment.
  */
-abstract class NotesFragment : Fragment(), TimestampDialogFragment.OnDateTimeSetListener {
-
-    @JvmField
-    var actionModeListener: ActionModeListener? = null
+abstract class NotesFragment : CommonFragment(), TimestampDialogFragment.OnDateTimeSetListener {
 
     @Inject
     lateinit var dataRepository: DataRepository
@@ -39,11 +37,58 @@ abstract class NotesFragment : Fragment(), TimestampDialogFragment.OnDateTimeSet
     abstract fun getAdapter(): SelectableItemAdapter?
 
 
+    private var notePopup: PopupWindow? = null
+
+    protected fun showPopupWindow(
+        noteId: Long,
+        location: NotePopup.Location,
+        direction: Int,
+        itemView: View,
+        e1: MotionEvent,
+        e2: MotionEvent,
+        listener: NotePopupListener
+    ): PopupWindow? {
+
+        val anchor = itemView.findViewById<View>(R.id.item_head_title)
+
+        notePopup = NotePopup.showWindow(noteId, anchor, location, direction, e1, e2) { _, buttonId ->
+            listener.onPopupButtonClick(noteId, buttonId)
+        }
+
+        // Enable back handler if popup is shown
+        if (notePopup != null) {
+            notePopupDismissOnBackPress.isEnabled = true
+        }
+
+        // Disable back handler on dismiss
+        notePopup?.setOnDismissListener {
+            notePopup = null
+            notePopupDismissOnBackPress.isEnabled = false
+        }
+
+        return notePopup
+    }
+
+    protected val notePopupDismissOnBackPress = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            // Dismiss window on back press
+            dismiss()
+
+            // Disable self and press back again
+            isEnabled = false
+            activity?.onBackPressed()
+        }
+    }
+
+    private fun dismiss() {
+        notePopup?.dismiss()
+        notePopup = null
+    }
+
+
     @JvmField
     var dialog: AlertDialog? = null
 
-
-    var fragmentActionMode: ActionMode? = null
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -65,13 +110,7 @@ abstract class NotesFragment : Fragment(), TimestampDialogFragment.OnDateTimeSet
 
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
 
-        getAdapter()?.let { adapter ->
-            adapter.getSelection().saveIds(outState)
-
-            /* Save action mode state (move mode). */
-            val actionMode = actionModeListener?.actionMode
-            outState.putBoolean("actionModeMove", actionMode != null && "M" == actionMode.tag)
-        }
+        getAdapter()?.getSelection()?.saveIds(outState)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -90,10 +129,10 @@ abstract class NotesFragment : Fragment(), TimestampDialogFragment.OnDateTimeSet
 
     protected fun openNoteStateDialog(listener: Listener, noteIds: Set<Long>, currentState: String?) {
         dialog = NoteStateDialog.show(
-                context!!,
-                currentState,
-                { state -> listener.onStateChangeRequest(noteIds, state) },
-                { listener.onStateChangeRequest(noteIds, null) })
+            requireContext(),
+            currentState,
+            { state -> listener.onStateChangeRequest(noteIds, state) },
+            { listener.onStateChangeRequest(noteIds, null) })
     }
 
     protected fun displayTimestampDialog(id: Int, noteIds: Set<Long>) {
@@ -151,11 +190,11 @@ abstract class NotesFragment : Fragment(), TimestampDialogFragment.OnDateTimeSet
     }
 
     fun scheduledTimeButtonIds(): Set<Int> {
-        return setOf(R.id.bottom_action_bar_schedule, R.id.quick_bar_schedule)
+        return setOf(R.id.schedule, R.id.note_popup_set_schedule)
     }
 
     fun deadlineTimeButtonIds(): Set<Int> {
-        return setOf(R.id.bottom_action_bar_deadline, R.id.quick_bar_deadline)
+        return setOf(R.id.deadline, R.id.note_popup_set_deadline)
     }
 
     interface Listener {
@@ -171,6 +210,10 @@ abstract class NotesFragment : Fragment(), TimestampDialogFragment.OnDateTimeSet
 
         fun onScheduledTimeUpdateRequest(noteIds: Set<Long>, time: OrgDateTime?)
         fun onDeadlineTimeUpdateRequest(noteIds: Set<Long>, time: OrgDateTime?)
+
+        fun onClockIn(noteIds: Set<Long>)
+        fun onClockOut(noteIds: Set<Long>)
+        fun onClockCancel(noteIds: Set<Long>)
     }
 
     companion object {

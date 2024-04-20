@@ -26,7 +26,6 @@
     <string name="delete">刪除</string>
     <string name="delete_with_quoted_argument">刪除 \"%s\"</string>
     <string name="name">名稱</string>
-    <string name="value">數值</string>
     <string name="query">查詢</string>
     <string name="done">完成</string>
     <string name="mark_as_done">標記為已完成</string>
@@ -155,8 +154,9 @@
     <string name="searches">搜尋</string>
     <string name="search">搜尋</string>
     <string name="new_search">新搜尋</string>
-    <string name="no_repos">未配置資料庫</string>
     <string name="multiple_repos">存在多個資料庫</string>
+    <string name="no_repos">未配置資料庫</string>
+    <string name="no_books">沒有找到筆記本</string>
     <string name="book_encoding">筆記本的編碼</string>
     <string name="collecting_notebooks_in_progress">正在收集筆記..</string>
     <string name="syncing_in_progress">正在同步...</string>
@@ -168,9 +168,13 @@
     <string name="directory">資料夾</string>
     <string name="fragment_repo_dropbox_directory_desc">Dropbox 內的資料夾 (例如 “/Documents/Orgzly”)</string>
     <string name="directory_uri">資料夾 URI</string>
+    <string name="git_clone_progress">複製資料庫</string>
+    <string name="git_verifying_settings">確保資料庫設定起作用</string>
     <string name="git_url_hint">Remote 遠端位址 (如 git@github:orgzly/orgzly-android.git)</string>
     <string name="git_directory_hint">目錄位址 (如 \"file:/sdcard/orgzly\")</string>
     <string name="git_ssh_key_hint">SSH 金鑰位址 (如 \"file:/sdcard/id_rsa\")</string>
+    <string name="git_https_username_hint">使用者名稱</string>
+    <string name="git_https_password_hint">密碼</string>
     <string name="git_author_hint">作者 (如 無名氏)</string>
     <string name="git_email_hint">電子郵件 (例如 john@email.com)</string>
     <string name="git_branch_hint">Branch 分支 (如 master)</string>
@@ -275,6 +279,10 @@
     <string name="notebooks_sort_order">筆記本排序順序</string>
     <string name="font_size">字型大小</string>
     <string name="color_scheme">色彩配置</string>
+    <string name="other">其他</string>
+    <string name="theme">佈景主題</string>
+    <string name="light_scheme">亮色方案</string>
+    <string name="dark_scheme">暗色方案</string>
     <string name="monospaced_font">等寬字型</string>
     <string name="monospaced_font_summary">使用等寬字型做為筆記的內容和筆記本的前言</string>
     <string name="reversed_note_click_action">反轉筆記的點擊操作</string>
@@ -341,6 +349,8 @@
     <string name="displayed_book_details_used_encoding">使用編碼</string>
     <string name="displayed_book_details_last_action">最後一次操作</string>
     <string name="displayed_book_details_notes_count">筆記數量</string>
+    <string name="color_scheme_system">系统</string>
+    <string name="color_scheme_dynamic">動態取色</string>
     <string name="color_scheme_light">亮色</string>
     <string name="color_scheme_dark">暗色</string>
     <string name="color_scheme_black">黑色</string>
@@ -426,6 +436,7 @@
     <string name="list_widget_nothing_selected">沒有選取搜尋</string>
     <string name="auto_sync">自動同步</string>
     <string name="auto_sync_experimental_summary">只使用本地資料庫</string>
+    <string name="auto_sync_summary">不支持 Dropbox</string>
     <string name="auto_sync_warning">根據您選擇的選項，同步可能會經常觸發。如果筆記本被修改，則其整個內容被傳送到存儲庫或從存儲庫傳送。正在進行同步時，某些操作可能會延遲。</string>
     <string name="pref_title_sync_after_note_create">已創建筆記</string>
     <string name="pref_summary_sync_after_note_create">在新增筆記後同步</string>
@@ -497,6 +508,8 @@
     <string name="display_inline_images_summary">在筆記中顯示圖像</string>
     <string name="scale_down_to_width">縮放至與寬度相符</string>
     <string name="scale_down_to_width_summary">將圖像縮小到指定的寬度</string>
+    <string name="file_absolute_root">絕對連結的根目錄 (e.g. file:/readme.txt)</string>
+    <string name="file_relative_root">相對連結的根目錄 (例如 file:readme.txt)</string>
     <string name="argument_used">%s 已使用</string>
     <string name="argument_detected">偵測到 %s</string>
     <string name="argument_selected">已選取 %s</string>
@@ -545,4 +558,17 @@
     <string name="overdue">逾期</string>
     <string name="help">幫助</string>
     <string name="content">内容</string>
+    <string name="prepend">前引</string>
+    <string name="insert_new_note_at_beginning">在開頭插入新筆記</string>
+    <string name="developer_options">開發人員選項</string>
+    <string name="git_repository_type">Git 儲存庫型式</string>
+    <string name="in_development">開發中</string>
+    <string name="select_notebook">選擇筆記本</string>
+    <string name="highlight_rich_text_being_edited">高光正在編輯的富文本</string>
+    <string name="use_alarm_clock_for_tod_reminders">使用鬧鐘</string>
+    <string name="use_alarm_clock_for_tod_reminders_summary">一天中的時間設定提醒</string>
+    <string name="log_major_events">記錄重大事件</string>
+    <string name="logs">記錄日誌</string>
+    <string name="share">分享</string>
+    <string name="refresh_data">重新整理</string>
 </resources>

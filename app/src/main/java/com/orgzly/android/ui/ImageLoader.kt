@@ -6,30 +6,30 @@ import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
-import android.os.Environment
-import androidx.core.content.FileProvider
-import androidx.core.content.res.ResourcesCompat
 import android.text.Spannable
 import android.text.style.ImageSpan
 import android.view.View
+import android.widget.TextView
+import androidx.core.content.FileProvider
+import androidx.core.content.res.ResourcesCompat
+import com.bumptech.glide.Glide
+import com.bumptech.glide.request.RequestOptions
+import com.bumptech.glide.request.target.CustomTarget
+import com.bumptech.glide.request.transition.Transition
 import com.orgzly.BuildConfig
+import com.orgzly.R
 import com.orgzly.android.App
 import com.orgzly.android.prefs.AppPreferences
-import com.orgzly.android.ui.views.TextViewWithMarkup
 import com.orgzly.android.ui.views.style.FileLinkSpan
+import com.orgzly.android.usecase.LinkFindTarget
+import com.orgzly.android.usecase.UseCaseRunner
 import com.orgzly.android.util.AppPermissions
-import java.io.File
-import com.bumptech.glide.Glide
-import com.bumptech.glide.request.target.SimpleTarget
-import com.bumptech.glide.request.transition.Transition
-import com.bumptech.glide.request.RequestOptions
-import com.orgzly.R
 import com.orgzly.android.util.LogUtils
-
+import java.io.File
 
 object ImageLoader {
     @JvmStatic
-    fun loadImages(textWithMarkup: TextViewWithMarkup) {
+    fun loadImages(textWithMarkup: TextView) {
         val context = textWithMarkup.context
 
         // Only if AppPreferences.displayImages(context) is true
@@ -38,25 +38,25 @@ object ImageLoader {
                 // Storage permission has been granted
                 && AppPermissions.isGranted(context, AppPermissions.Usage.EXTERNAL_FILES_ACCESS)) {
             // Load the associated image for each FileLinkSpan
-            SpanUtils.forEachSpan(textWithMarkup.text as Spannable, FileLinkSpan::class.java) { span ->
+            SpanUtils.forEachSpan(textWithMarkup.text as Spannable, FileLinkSpan::class.java) { span, _, _ ->
                 loadImage(textWithMarkup, span)
             }
         }
     }
 
-    private fun loadImage(textWithMarkup: TextViewWithMarkup, span: FileLinkSpan) {
-        val path = span.path
+    private fun loadImage(textWithMarkup: TextView, fileLinkSpan: FileLinkSpan) {
+        val path = fileLinkSpan.path
 
         if (hasSupportedExtension(path)) {
             val text = textWithMarkup.text as Spannable
             // Get the current context
             val context = App.getAppContext()
 
-            // Get the file
-            val file = if (path.startsWith('/')) {
-                File(path)
-            } else {
-                File(Environment.getExternalStorageDirectory(), path)
+            val file = UseCaseRunner.run(LinkFindTarget(path)).userData
+
+            if (file !is File) {
+                if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, "Did not find a File target for $path, actually found $file")
+                return
             }
 
             if (file.exists()) {
@@ -82,11 +82,11 @@ object ImageLoader {
                         .asBitmap()
                         .apply(RequestOptions().placeholder(drawable))
                         .load(contentUri)
-                        .into(object : SimpleTarget<Bitmap>() {
+                        .into(object : CustomTarget<Bitmap>() {
 
-                            val start = text.getSpanStart(span)
-                            val end = text.getSpanEnd(span)
-                            val flags = text.getSpanFlags(span)
+                            val start = text.getSpanStart(fileLinkSpan)
+                            val end = text.getSpanEnd(fileLinkSpan)
+                            val flags = text.getSpanFlags(fileLinkSpan)
 
                             var placeholderSpan: ImageSpan? = null
 
@@ -114,6 +114,9 @@ object ImageLoader {
                                 }
 
                                 text.setSpan(ImageSpan(bitmapDrawable), start, end, flags)
+                            }
+
+                            override fun onLoadCleared(placeholder: Drawable?) {
                             }
                         })
             } else {

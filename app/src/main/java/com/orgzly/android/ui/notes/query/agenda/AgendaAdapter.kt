@@ -7,24 +7,20 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.orgzly.BuildConfig
 import com.orgzly.R
 import com.orgzly.android.ui.OnViewHolderClickListener
 import com.orgzly.android.ui.SelectableItemAdapter
 import com.orgzly.android.ui.Selection
 import com.orgzly.android.ui.notes.NoteItemViewBinder
 import com.orgzly.android.ui.notes.NoteItemViewHolder
-import com.orgzly.android.ui.notes.quickbar.QuickBars
 import com.orgzly.android.ui.stickyheaders.StickyHeaders
-import com.orgzly.android.util.LogUtils
 import com.orgzly.android.util.UserTimeFormatter
 import com.orgzly.databinding.ItemAgendaDividerBinding
 import com.orgzly.databinding.ItemHeadBinding
 
 class AgendaAdapter(
         private val context: Context,
-        private val clickListener: OnViewHolderClickListener<AgendaItem>,
-        private val quickBar: QuickBars
+        private val clickListener: OnViewHolderClickListener<AgendaItem>
 ) : ListAdapter<AgendaItem, RecyclerView.ViewHolder>(DIFF_CALLBACK), SelectableItemAdapter, StickyHeaders {
 
     private val adapterSelection: Selection = Selection()
@@ -43,8 +39,6 @@ class AgendaAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
-
         return when (viewType) {
             OVERDUE_ITEM_TYPE, DAY_ITEM_TYPE -> {
                 val binding = ItemAgendaDividerBinding.inflate(
@@ -87,9 +81,7 @@ class AgendaAdapter(
 
                 noteViewBinder.bind(holder, item.note, item.timeType)
 
-                quickBar.bind(holder)
-
-                getSelection().setIsSelectedBackground(holder.itemView, item.id)
+                getSelection().setBackgroundIfSelected(holder.itemView, item.id)
             }
         }
     }
@@ -119,6 +111,13 @@ class AgendaAdapter(
 
     override fun getSelection(): Selection {
         return adapterSelection
+    }
+
+    fun clearSelection() {
+        if (getSelection().count > 0) {
+            getSelection().clear()
+            notifyDataSetChanged() // FIXME
+        }
     }
 
     override fun isStickyHeader(position: Int): Boolean {

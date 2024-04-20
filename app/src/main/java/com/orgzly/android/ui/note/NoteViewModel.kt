@@ -23,27 +23,25 @@ import com.orgzly.org.OrgProperties
 import com.orgzly.org.datetime.OrgRange
 import com.orgzly.org.parser.OrgParserWriter
 
+data class NoteInitialData(
+    val bookId: Long,
+    val noteId: Long, // Could be 0 if new note is being created
+    val place: Place? = null, // Relative location, used for new notes
+    val title: String? = null, // Initial title, used for when sharing
+    val content: String? = null // Initial content, used for when sharing
+)
+
 class NoteViewModel(
-        private val dataRepository: DataRepository,
-        var bookId: Long,
-        private var noteId: Long,
-        private val place: Place?,
-        private val title: String?,
-        private val content: String?
-) : CommonViewModel() {
+    private val dataRepository: DataRepository,
+    private val initialData: NoteInitialData) : CommonViewModel() {
 
-    enum class ViewEditMode {
-        VIEW,
-        EDIT,
-        EDIT_TITLE_WITH_KEYBOARD,
-        EDIT_CONTENT_WITH_KEYBOARD
-    }
+    var bookId = initialData.bookId
+    var noteId = initialData.noteId
+    private val place = initialData.place
+    private val title = initialData.title
+    private val content = initialData.content
 
-    val viewEditMode = MutableLiveData(startMode())
-
-
-    val bookView: MutableLiveData<BookView> = MutableLiveData()
-
+    val bookView: MutableLiveData<BookView?> = MutableLiveData()
 
     val tags: LiveData<List<String>> by lazy {
         dataRepository.selectAllTagsLiveData()
@@ -78,7 +76,7 @@ class NoteViewModel(
             }
 
             notePayload = if (isNew()) {
-                NoteBuilder.newPayload(App.getAppContext(), title ?: "", content)
+                NoteBuilder.newPayload(App.getAppContext(), title.orEmpty(), content)
             } else {
                 dataRepository.getNotePayload(noteId)
             }
@@ -121,78 +119,6 @@ class NoteViewModel(
         }
     }
 
-    private fun startMode(): ViewEditMode {
-        // Always start new notes in edit mode
-        if (isNew()) {
-            return ViewEditMode.EDIT_CONTENT_WITH_KEYBOARD
-        }
-
-        return when (AppPreferences.noteDetailsOpeningMode(App.getAppContext())) {
-            "last" ->
-                return when (AppPreferences.noteDetailsLastMode(App.getAppContext())) {
-                    "view" -> ViewEditMode.VIEW
-                    "edit" -> ViewEditMode.EDIT
-                    else -> ViewEditMode.EDIT
-                }
-            "view" -> ViewEditMode.VIEW
-            "edit" -> ViewEditMode.EDIT
-            else -> ViewEditMode.EDIT
-        }
-    }
-
-    /**
-     * Toggle view/edit mode.
-     */
-    fun toggleViewEditMode() {
-        val mode = when (viewEditMode.value) {
-            ViewEditMode.VIEW ->
-                ViewEditMode.EDIT
-
-            ViewEditMode.EDIT,
-            ViewEditMode.EDIT_TITLE_WITH_KEYBOARD,
-            ViewEditMode.EDIT_CONTENT_WITH_KEYBOARD ->
-                ViewEditMode.VIEW
-
-            null ->
-                ViewEditMode.EDIT
-        }
-
-        viewEditMode.postValue(mode)
-
-        // Only remember last mode when opening existing notes
-        if (!isNew()) {
-            saveCurrentMode(mode)
-        }
-    }
-
-    fun editTitle(saveMode: Boolean = true) {
-        ViewEditMode.EDIT_TITLE_WITH_KEYBOARD.let { mode ->
-            viewEditMode.postValue(mode)
-            if (saveMode) {
-                saveCurrentMode(mode)
-            }
-        }
-    }
-
-    fun editContent() {
-        ViewEditMode.EDIT_CONTENT_WITH_KEYBOARD.let { mode ->
-            viewEditMode.postValue(mode)
-            saveCurrentMode(mode)
-        }
-    }
-
-    fun isInEditMode(): Boolean {
-        return viewEditMode.value != ViewEditMode.VIEW
-    }
-
-    private fun saveCurrentMode(mode: ViewEditMode) {
-        val context = App.getAppContext()
-
-        AppPreferences.noteDetailsLastMode(
-                context, if (mode == ViewEditMode.VIEW) "view" else "edit")
-
-    }
-
     fun savePayloadToBundle(outState: Bundle) {
         notePayload?.let {
             outState.putParcelable("payload", it)
@@ -204,20 +130,20 @@ class NoteViewModel(
     }
 
     fun updatePayload(
-            title: String,
-            content: String,
-            state: String?,
-            priority: String?,
-            tags: List<String>,
-            properties: OrgProperties) {
+        title: String,
+        content: String,
+        state: String?,
+        priority: String?,
+        tags: List<String>,
+        properties: OrgProperties) {
 
         notePayload = notePayload?.copy(
-                title = title,
-                content = content,
-                state = state,
-                priority = priority,
-                tags = tags,
-                properties = properties)
+            title = title,
+            content = content,
+            state = state,
+            priority = priority,
+            tags = tags,
+            properties = properties)
     }
 
     fun updatePayloadState(state: String?) {
@@ -307,6 +233,10 @@ class NoteViewModel(
         return place != null
     }
 
+    fun hasInitialData(): Boolean {
+        return !TextUtils.isEmpty(initialData.title) || !TextUtils.isEmpty(initialData.content)
+    }
+
     fun setBook(b: BookView) {
         bookId = b.book.id
         bookView.value = b
@@ -365,5 +295,8 @@ class NoteViewModel(
         } else {
             true
         }
+    }
+
+    companion object {
     }
 }

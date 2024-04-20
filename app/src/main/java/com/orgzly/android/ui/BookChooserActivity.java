@@ -2,24 +2,22 @@ package com.orgzly.android.ui;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.widget.Toast;
+
 import androidx.core.content.pm.ShortcutInfoCompat;
 import androidx.core.content.pm.ShortcutManagerCompat;
 import androidx.core.graphics.drawable.IconCompat;
-import android.widget.Toast;
 
 import com.orgzly.BuildConfig;
 import com.orgzly.R;
 import com.orgzly.android.App;
 import com.orgzly.android.AppIntent;
-import com.orgzly.android.BookFormat;
+import com.orgzly.android.BookUtils;
 import com.orgzly.android.data.DataRepository;
 import com.orgzly.android.db.entity.Book;
-import com.orgzly.android.BookUtils;
 import com.orgzly.android.ui.books.BooksFragment;
 import com.orgzly.android.ui.main.MainActivity;
 import com.orgzly.android.util.LogUtils;
-
-import org.jetbrains.annotations.NotNull;
 
 import javax.inject.Inject;
 
@@ -48,14 +46,13 @@ public class BookChooserActivity extends CommonActivity
 
         setContentView(R.layout.activity_bookchooser);
 
-        setupActionBar(R.string.pick_a_notebook, false);
-
         setupFragments(savedInstanceState);
     }
 
     private void setupFragments(Bundle savedInstanceState) {
         if (savedInstanceState == null) {
-            BooksFragment mBooksFragment = BooksFragment.Companion.getInstance(false, false);
+            BooksFragment mBooksFragment = BooksFragment.getInstance(false);
+
             getSupportFragmentManager()
                     .beginTransaction()
                     .replace(R.id.activity_bookchooser_main, mBooksFragment, BooksFragment.Companion.getFRAGMENT_TAG())
@@ -114,29 +111,5 @@ public class BookChooserActivity extends CommonActivity
      */
     private IconCompat createIcon() {
         return IconCompat.createWithResource(this, R.mipmap.cic_shortcut_notebook);
-    }
-
-    @Override
-    public void onBookCreateRequest() {
-    }
-
-    @Override
-    public void onBookLinkSetRequest(long bookId) {
-    }
-
-    @Override
-    public void onForceSaveRequest(long bookId) {
-    }
-
-    @Override
-    public void onForceLoadRequest(long bookId) {
-    }
-
-    @Override
-    public void onBookExportRequest(@NotNull Book book, @NotNull BookFormat format) {
-    }
-
-    @Override
-    public void onBookImportRequest() {
     }
 }

@@ -6,26 +6,24 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
-import android.view.View
 import androidx.annotation.StringRes
 import androidx.preference.*
 import com.orgzly.BuildConfig
 import com.orgzly.R
 import com.orgzly.android.AppIntent
+import com.orgzly.android.SharingShortcutsManager
 import com.orgzly.android.prefs.*
-import com.orgzly.android.reminders.ReminderService
+import com.orgzly.android.reminders.RemindersScheduler
 import com.orgzly.android.ui.CommonActivity
 import com.orgzly.android.ui.NoteStates
 import com.orgzly.android.ui.notifications.Notifications
-import com.orgzly.android.ui.util.ActivityUtils
-import com.orgzly.android.ui.util.styledAttributes
+import com.orgzly.android.ui.util.KeyboardUtils
 import com.orgzly.android.usecase.NoteReparseStateAndTitles
 import com.orgzly.android.usecase.NoteSyncCreatedAtTimeWithProperty
 import com.orgzly.android.usecase.UseCase
 import com.orgzly.android.util.AppPermissions
 import com.orgzly.android.util.LogUtils
 import com.orgzly.android.widgets.ListWidgetProvider
-import java.util.*
 
 /**
  * Displays settings.
@@ -79,9 +77,22 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
 
         setDefaultStateForNewNote()
 
-        /* Disable changing the language if it's not supported in this version. */
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1) {
-            preference(R.string.pref_key_ignore_system_locale)?.let {
+        preference(R.string.pref_key_file_absolute_root)?.let {
+            val pref = it as EditTextPreference
+            pref.text = AppPreferences.fileAbsoluteRoot(context)
+        }
+
+        preference(R.string.pref_key_file_relative_root)?.let {
+            val pref = it as EditTextPreference
+            pref.text = AppPreferences.fileRelativeRoot(context)
+        }
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            preference(R.string.pref_key_reminders_notification_settings_V26)?.let {
+                preferenceScreen.removePreference(it)
+            }
+        } else {
+            preference(R.string.pref_key_reminders_notification_settings_preV26)?.let {
                 preferenceScreen.removePreference(it)
             }
         }
@@ -103,30 +114,10 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
         }
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        /*
-         * Set fragment's background.
-         */
-        val color = view.context.styledAttributes(R.styleable.ColorScheme) { typedArray ->
-            typedArray.getColor(R.styleable.ColorScheme_item_book_card_bg_color, -1)
-        }
-
-        if (color != -1) {
-            view.setBackgroundColor(color)
-        }
-
-        /* Remove dividers. */
-//        view?.findViewById(android.R.id.list)?.let {
-//            (it as? ListView)?.divider = null
-//        }
-    }
-
     /*
      * Display custom preference's dialog.
      */
-    override fun onDisplayPreferenceDialog(preference: Preference?) {
+    override fun onDisplayPreferenceDialog(preference: Preference) {
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, preference)
 
         when (preference) {
@@ -144,6 +135,12 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
                 displayCustomPreferenceDialogFragment(
                         TimePreferenceFragment.getInstance(preference),
                         TimePreferenceFragment.FRAGMENT_TAG)
+
+            is NotePopupPreference ->
+                displayCustomPreferenceDialogFragment(
+                    NotePopupPreferenceFragment.getInstance(preference),
+                    NotePopupPreferenceFragment.FRAGMENT_TAG)
+
 
             else -> super.onDisplayPreferenceDialog(preference)
         }
@@ -165,7 +162,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
         listener?.onTitleChange(preferenceScreen?.title)
 
         /* Start to listen for any preference changes. */
-        PreferenceManager.getDefaultSharedPreferences(activity)
+        PreferenceManager.getDefaultSharedPreferences(requireActivity())
                 .registerOnSharedPreferenceChangeListener(this)
     }
 
@@ -173,7 +170,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
         super.onPause()
 
         /* Stop listening for preference changed. */
-        PreferenceManager.getDefaultSharedPreferences(activity)
+        PreferenceManager.getDefaultSharedPreferences(requireActivity())
                 .unregisterOnSharedPreferenceChangeListener(this)
     }
 
@@ -187,18 +184,27 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
      * Called when a shared preference is modified in any way.
      * Used to update AppPreferences' static values and do any required post-settings-change work.
      */
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String) {
+    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, sharedPreferences, key)
 
         val activity = activity as? CommonActivity ?: return
 
         when (key) {
+            getString(R.string.pref_key_note_popup_buttons_in_book_left),
+            getString(R.string.pref_key_note_popup_buttons_in_book_right),
+            getString(R.string.pref_key_note_popup_buttons_in_query_left),
+            getString(R.string.pref_key_note_popup_buttons_in_query_right) -> {
+                findPreference<NotePopupPreference>(key)?.summary =
+                    sharedPreferences.getString(key, "")
+
+            }
+
             // State keywords
             getString(R.string.pref_key_states) -> {
                 AppPreferences.updateStaticKeywords(context)
 
                 /* Re-parse notes. */
-                ActivityUtils.closeSoftKeyboard(activity)
+                KeyboardUtils.closeSoftKeyboard(activity)
                 listener?.onNotesUpdateRequest(NoteReparseStateAndTitles())
 
                 setDefaultStateForNewNote()
@@ -216,7 +222,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
             getString(R.string.pref_key_ongoing_notification),
             getString(R.string.pref_key_ongoing_notification_priority) -> {
                 if (AppPreferences.newNoteNotification(context)) {
-                    Notifications.createNewNoteNotification(context)
+                    Notifications.showOngoingNotification(context)
                 } else {
                     Notifications.cancelNewNoteNotification(context)
                 }
@@ -258,11 +264,14 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
 
             // Update widget for changed style
             getString(R.string.pref_key_widget_color_scheme),
-            getString(R.string.pref_key_widget_font_size),
             getString(R.string.pref_key_widget_opacity),
+            getString(R.string.pref_key_widget_font_size),
+            getString(R.string.pref_key_widget_display_checkmarks),
+            getString(R.string.pref_key_widget_display_book_name),
             getString(R.string.pref_key_widget_update_frequency) -> {
-                val intent = Intent(context, ListWidgetProvider::class.java)
-                intent.action = AppIntent.ACTION_UPDATE_LAYOUT_LIST_WIDGET
+                val intent = Intent(context, ListWidgetProvider::class.java).apply {
+                    action = AppIntent.ACTION_UPDATE_LAYOUT_LIST_WIDGET
+                }
                 context?.sendBroadcast(intent)
             }
 
@@ -297,8 +306,9 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
          * - Changing states or priorities can affect the displayed data
          * - Enabling or disabling reminders needs to trigger reminder service notification
          */
-        ReminderService.notifyForDataChanged(requireContext())
-        ListWidgetProvider.notifyDataChanged(requireContext())
+        RemindersScheduler.notifyDataSetChanged(requireContext())
+        ListWidgetProvider.notifyDataSetChanged(requireContext())
+        SharingShortcutsManager().replaceDynamicShortcuts(requireContext())
     }
 
     private fun updateRemindersScreen() {
@@ -353,8 +363,8 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
         }
     }
 
-    override fun onPreferenceTreeClick(preference: Preference?): Boolean {
-        if (preference != null && preference is PreferenceScreen) {
+    override fun onPreferenceTreeClick(preference: Preference): Boolean {
+        if (preference is PreferenceScreen) {
             preference.key?.let { key ->
                 if (key in PREFS_RESOURCES) {
                     listener?.onPreferenceScreen(key)
@@ -400,6 +410,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedP
                 "prefs_screen_org_file_format" to R.xml.prefs_screen_org_file_format, // Sub-screen
                 "prefs_screen_org_mode_tags_indent" to R.xml.prefs_screen_org_mode_tags_indent, // Sub-screen
                 "prefs_screen_widget" to R.xml.prefs_screen_widget, // Sub-screen
+                "prefs_screen_developer" to R.xml.prefs_screen_developer, // Sub-screen
                 "prefs_screen_app" to R.xml.prefs_screen_app
         )
 

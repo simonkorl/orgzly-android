@@ -1,37 +1,49 @@
 package com.orgzly.android.ui.books
 
-
-import android.app.AlertDialog
 import android.content.Context
 import android.content.DialogInterface
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.Log
-import android.view.*
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.view.ActionMode
-import androidx.fragment.app.Fragment
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
+import androidx.core.os.bundleOf
 import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModelProviders
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.orgzly.BuildConfig
 import com.orgzly.R
 import com.orgzly.android.App
 import com.orgzly.android.BookFormat
+import com.orgzly.android.BookName
 import com.orgzly.android.data.DataRepository
 import com.orgzly.android.db.entity.Book
 import com.orgzly.android.db.entity.BookView
 import com.orgzly.android.prefs.AppPreferences
-import com.orgzly.android.ui.CommonActivity
-import com.orgzly.android.ui.Fab
+import com.orgzly.android.sync.SyncRunner
+import com.orgzly.android.ui.CommonFragment
 import com.orgzly.android.ui.OnViewHolderClickListener
+import com.orgzly.android.ui.books.BooksViewModel.Companion.APP_BAR_DEFAULT_MODE
+import com.orgzly.android.ui.books.BooksViewModel.Companion.APP_BAR_SELECTION_MODE
+import com.orgzly.android.ui.dialogs.SimpleOneLinerDialog
 import com.orgzly.android.ui.drawer.DrawerItem
 import com.orgzly.android.ui.main.SharedMainActivityViewModel
-import com.orgzly.android.ui.util.ActivityUtils
+import com.orgzly.android.ui.main.setupSearchView
+import com.orgzly.android.ui.repos.ReposActivity
+import com.orgzly.android.ui.settings.SettingsActivity
+import com.orgzly.android.ui.showSnackbar
+import com.orgzly.android.ui.util.KeyboardUtils
 import com.orgzly.android.ui.util.setup
-import com.orgzly.android.ui.util.styledAttributes
 import com.orgzly.android.usecase.BookDelete
 import com.orgzly.android.util.LogUtils
 import com.orgzly.android.util.MiscUtils
@@ -44,20 +56,16 @@ import javax.inject.Inject
  * Displays all notebooks.
  * Allows creating new, deleting, renaming, setting links etc.
  */
-class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<BookView> {
+class BooksFragment : CommonFragment(), DrawerItem, OnViewHolderClickListener<BookView> {
 
     private lateinit var binding: FragmentBooksBinding
 
     private lateinit var viewAdapter: BooksAdapter
 
-    private var actionMode: ActionMode? = null
-    private val actionModeCallback = ActionModeCallback()
-
     private var dialog: AlertDialog? = null
 
     private var listener: Listener? = null
 
-    private var withOptionsMenu = true
     private var withActionBar = true
 
     @Inject
@@ -66,6 +74,12 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
     private lateinit var sharedMainActivityViewModel: SharedMainActivityViewModel
 
     private lateinit var viewModel: BooksViewModel
+
+    private val appBarBackPressHandler = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            viewModel.appBar.handleOnBackPressed()
+        }
+    }
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -80,7 +94,6 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
     private fun parseArguments() {
         requireNotNull(arguments) { "No arguments found to " + BooksFragment::class.java.simpleName }
 
-        withOptionsMenu = arguments?.getBoolean(ARG_WITH_OPTIONS_MENU) ?: true
         withActionBar = arguments?.getBoolean(ARG_WITH_ACTION_BAR) ?: true
     }
 
@@ -89,13 +102,26 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
 
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, savedInstanceState)
 
-        sharedMainActivityViewModel = ViewModelProviders.of(requireActivity())
+        sharedMainActivityViewModel = ViewModelProvider(requireActivity())
                 .get(SharedMainActivityViewModel::class.java)
 
-        /* Would like to add items to the Options Menu.
-         * Required (for fragments only) to receive onCreateOptionsMenu() call.
-         */
-        setHasOptionsMenu(withOptionsMenu)
+        // Result from the dialog prompting for notebook name
+        childFragmentManager.setFragmentResultListener("name-new-book", this) { _, result ->
+            val bookName = result.getString("value", "")
+            viewModel.createBook(bookName)
+        }
+
+        // Result from the dialog prompting for notebook name
+        childFragmentManager.setFragmentResultListener("name-imported-book", this) { _, result ->
+            val bookName = result.getString("value", "")
+            val uri = result.getBundle("user-data")?.getParcelable<Uri>("uri")!!
+            viewModel.importBook(uri, bookName)
+        }
+
+        val factory = BooksViewModelFactory.getInstance(dataRepository)
+        viewModel = ViewModelProvider(this, factory).get(BooksViewModel::class.java)
+
+        requireActivity().onBackPressedDispatcher.addCallback(this, appBarBackPressHandler)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
@@ -123,18 +149,16 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
     }
 
     override fun onClick(view: View, position: Int, item: BookView) {
-        if (actionMode == null) {
+        if (viewAdapter.getSelection().count == 0) {
+            // No books selected
             listener?.onBookClicked(item.book.id)
 
         } else {
+            // There are books selected
             viewAdapter.getSelection().toggleSingleSelect(item.book.id)
             viewAdapter.notifyDataSetChanged() // FIXME
 
-            if (viewAdapter.getSelection().count == 0) {
-                actionMode?.finish()
-            } else {
-                actionMode?.invalidate()
-            }
+            viewModel.appBar.toModeFromSelectionCount(viewAdapter.getSelection().count)
         }
     }
 
@@ -147,46 +171,104 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
         viewAdapter.getSelection().toggleSingleSelect(item.book.id)
         viewAdapter.notifyDataSetChanged() // FIXME
 
-        if (viewAdapter.getSelection().count > 0) {
-            if (actionMode == null) {
-                actionMode = with(activity as AppCompatActivity) {
-                    startSupportActionMode(actionModeCallback)
+        viewModel.appBar.toModeFromSelectionCount(viewAdapter.getSelection().count)
+    }
+
+    private fun topToolbarToDefault() {
+        if (withActionBar) {
+            binding.topToolbar.run {
+                menu.clear()
+                inflateMenu(R.menu.books_actions)
+
+                setNavigationIcon(R.drawable.ic_menu)
+
+                setNavigationOnClickListener {
+                    sharedMainActivityViewModel.openDrawer()
                 }
-            } else {
-                actionMode?.invalidate()
+
+                setOnMenuItemClickListener { menuItem ->
+                    when (menuItem.itemId) {
+                        R.id.books_options_menu_item_import_book -> {
+                            pickFileForBookImport.launch("*/*")
+                        }
+
+                        R.id.sync -> {
+                            SyncRunner.startSync()
+                        }
+
+                        R.id.activity_action_settings -> {
+                            startActivity(Intent(context, SettingsActivity::class.java))
+                        }
+                    }
+                    true
+                }
+
+                setOnClickListener {
+                    binding.fragmentBooksRecyclerView.scrollToPosition(0)
+                }
+
+                title = getString(R.string.notebooks)
+
+                requireActivity().setupSearchView(menu)
             }
 
         } else {
-            actionMode?.finish()
+            binding.topToolbar.run {
+                menu.clear()
+                navigationIcon = null
+                title = getString(R.string.select_notebook)
+            }
         }
-
     }
 
-    private inner class ActionModeCallback : ActionMode.Callback {
-        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
-            if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, mode, item)
+    private fun topToolbarToMainSelection() {
+        binding.topToolbar.run {
+            menu.clear()
+            inflateMenu(R.menu.books_cab)
 
-            val bookId = viewAdapter.getSelection().getOnly()
+            setNavigationIcon(R.drawable.ic_arrow_back)
 
-            if (bookId == null) {
-                Log.e(TAG, "Cannot handle action when there are no items selected")
+            setNavigationOnClickListener {
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
+            }
 
-            } else {
-                when (item.itemId) {
+            setOnMenuItemClickListener { menuItem ->
+                val bookId = viewAdapter.getSelection().getOnly()
+
+                if (bookId == null) {
+                    Log.e(TAG, "Cannot handle action when there are no items selected")
+                    return@setOnMenuItemClickListener true
+                }
+
+                when (menuItem.itemId) {
                     R.id.books_context_menu_rename -> {
                         viewModel.renameBookRequest(bookId)
                     }
 
                     R.id.books_context_menu_set_link -> {
-                        listener?.onBookLinkSetRequest(bookId)
+                        viewModel.setBookLinkRequest(bookId)
                     }
 
                     R.id.books_context_menu_force_save -> {
-                        listener?.onForceSaveRequest(bookId)
+                        dialog = MaterialAlertDialogBuilder(context)
+                            .setTitle(R.string.books_context_menu_item_force_save)
+                            .setMessage(R.string.overwrite_remote_notebook_question)
+                            .setPositiveButton(R.string.overwrite) { _, _ ->
+                                viewModel.forceSaveBookRequest(bookId)
+                            }
+                            .setNegativeButton(R.string.cancel, null)
+                            .show()
                     }
 
                     R.id.books_context_menu_force_load -> {
-                        listener?.onForceLoadRequest(bookId)
+                        dialog = MaterialAlertDialogBuilder(context)
+                            .setTitle(R.string.books_context_menu_item_force_load)
+                            .setMessage(R.string.overwrite_local_notebook_question)
+                            .setPositiveButton(R.string.overwrite) { _, _ ->
+                                viewModel.forceLoadBookRequest(bookId)
+                            }
+                            .setNegativeButton(R.string.cancel, null)
+                            .show()
                     }
 
                     R.id.books_context_menu_export -> {
@@ -196,68 +278,38 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
                     R.id.books_context_menu_delete -> {
                         viewModel.deleteBookRequest(bookId)
                     }
-
-                    else -> {
-                    }
                 }
+
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
+
+                true
             }
 
-            actionMode?.finish()
+            setOnClickListener(null)
 
-            return true
+            title = viewAdapter.getSelection().count.toString()
         }
+    }
 
-        override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-            if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, mode, menu)
-            mode?.menuInflater?.inflate(R.menu.books_context, menu)
-
-            sharedMainActivityViewModel.lockDrawer()
-
-            return true
-        }
-
-        override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-            if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, mode, menu, viewAdapter.getSelection().count)
-
-            val selected = viewAdapter.getSelection().count
-
-            if (selected > 0) {
-                /* Update action mode with the number of selected items. */
-                // Disabled while allowing only one item to be selected
-                // mode?.title = viewAdapter.getSelectedItemCount().toString()
+    private val pickFileForBookExport =
+        registerForActivityResult(ActivityResultContracts.CreateDocument()) { uri ->
+            if (uri != null) {
+                viewModel.exportBook(uri)
             } else {
-                mode?.finish()
+                Log.w(TAG, "Export file not selected")
             }
-
-            return false
         }
 
-        override fun onDestroyActionMode(mode: ActionMode) {
-            if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, mode)
-            viewAdapter.getSelection().clear()
-            viewAdapter.notifyDataSetChanged() // FIXME
-            actionMode = null
-            sharedMainActivityViewModel.unlockDrawer()
-        }
-
+    private fun exportBook(book: Book, format: BookFormat) {
+        val defaultFileName = BookName.fileName(book.name, format)
+        pickFileForBookExport.launch(defaultFileName)
     }
 
     private fun deleteBookDialog(book: BookView) {
         val dialogBinding = DialogBookDeleteBinding.inflate(LayoutInflater.from(context))
 
         dialogBinding.deleteLinkedCheckbox.setOnCheckedChangeListener { _, isChecked ->
-            activity?.apply {
-                val color = styledAttributes(R.styleable.ColorScheme) { typedArray ->
-                    val index = if (isChecked) {
-                        R.styleable.ColorScheme_text_primary_color
-                    } else {
-                        R.styleable.ColorScheme_text_disabled_color
-                    }
-
-                    typedArray.getColor(index, 0)
-                }
-                dialogBinding.deleteLinkedUrl.setTextColor(color)
-            }
+            dialogBinding.deleteLinkedUrl.isEnabled = isChecked
         }
 
         val dialogClickListener = DialogInterface.OnClickListener { _, which ->
@@ -269,7 +321,7 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
             }
         }
 
-        val builder = AlertDialog.Builder(context)
+        val builder = MaterialAlertDialogBuilder(requireContext())
                 .setTitle(getString(R.string.delete_with_quoted_argument, book.book.name))
                 .setPositiveButton(R.string.delete, dialogClickListener)
                 .setNegativeButton(R.string.cancel, dialogClickListener)
@@ -305,7 +357,7 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
             }
         }
 
-        val dialogBuilder = AlertDialog.Builder(context)
+        val dialogBuilder = MaterialAlertDialogBuilder(requireContext())
                 .setTitle(getString(R.string.rename_book, MiscUtils.quotedString(book.book.name)))
                 .setPositiveButton(R.string.rename, dialogClickListener)
                 .setNegativeButton(R.string.cancel, dialogClickListener)
@@ -321,8 +373,8 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
             true
         }
 
-        d.setOnShowListener { ActivityUtils.openSoftKeyboard(activity, dialogBinding.name) }
-        d.setOnDismissListener { ActivityUtils.closeSoftKeyboard(activity) }
+        d.setOnShowListener { KeyboardUtils.openSoftKeyboard(dialogBinding.name) }
+        d.setOnDismissListener { KeyboardUtils.closeSoftKeyboard(activity) }
 
         // Disable positive button if value is empty or same
         dialogBinding.name.addTextChangedListener(object : TextWatcher {
@@ -349,9 +401,6 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
 
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, savedInstanceState)
 
-        val factory = BooksViewModelFactory.getInstance(dataRepository)
-        viewModel = ViewModelProviders.of(this, factory).get(BooksViewModel::class.java)
-
         viewModel.viewState.observe(viewLifecycleOwner, Observer {
             binding.fragmentBooksViewFlipper.displayedChild = when (it) {
                 BooksViewModel.ViewState.LOADING -> 0
@@ -361,45 +410,119 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
             }
         })
 
-        viewModel.books.observe(viewLifecycleOwner, Observer { books ->
-            viewAdapter.submitList(books)
+        viewModel.data.observe(viewLifecycleOwner, Observer { data ->
+            viewAdapter.submitList(data)
 
-            val ids = books.mapTo(hashSetOf()) { it.book.id }
+            val ids = data.mapTo(hashSetOf()) { it.book.id }
 
             viewAdapter.getSelection().removeNonExistent(ids)
 
-            actionMode?.invalidate()
+            viewModel.appBar.toModeFromSelectionCount(viewAdapter.getSelection().count)
         })
 
-        viewModel.bookDeleteRequestEvent.observeSingle(viewLifecycleOwner, Observer { bookView ->
+
+        viewModel.bookToDeleteEvent.observeSingle(viewLifecycleOwner, Observer { bookView ->
             if (bookView != null) {
                 deleteBookDialog(bookView)
             }
         })
 
-        viewModel.bookRenameRequestEvent.observeSingle(viewLifecycleOwner, Observer { bookView ->
+        viewModel.bookToRenameEvent.observeSingle(viewLifecycleOwner, Observer { bookView ->
             if (bookView != null) {
                 renameBookDialog(bookView)
             }
         })
 
-        viewModel.bookExportRequestEvent.observeSingle(viewLifecycleOwner, Observer { (book, format) ->
-            listener?.onBookExportRequest(book, format)
+        viewModel.bookToExportEvent.observeSingle(viewLifecycleOwner, Observer { (book, format) ->
+            exportBook(book, format)
+        })
+
+        viewModel.bookExportedEvent.observeSingle(viewLifecycleOwner, Observer { location ->
+            activity?.showSnackbar(resources.getString(R.string.book_exported, location))
         })
 
         viewModel.bookDeletedEvent.observeSingle(viewLifecycleOwner, Observer {
-            CommonActivity.showSnackbar(context, R.string.message_book_deleted)
+            activity?.showSnackbar(R.string.message_book_deleted)
         })
+
+        viewModel.setBookLinkRequestEvent.observeSingle(this) { (book, links, urls, checked) ->
+            if (links.isEmpty()) {
+                activity?.showSnackbar(getString(R.string.no_repos), R.string.repositories) {
+                    activity?.let {
+                        val intent = Intent(Intent.ACTION_VIEW)
+                        intent.setClass(it, ReposActivity::class.java)
+                        ContextCompat.startActivity(it, intent, null)
+                    }
+                }
+
+            } else {
+                dialog = MaterialAlertDialogBuilder(requireContext())
+                    .setTitle(R.string.book_link)
+                    .setSingleChoiceItems(
+                        urls.toTypedArray(),
+                        checked
+                    ) { _: DialogInterface, which: Int ->
+                        viewModel.setBookLink(book.id, links[which])
+                        dialog?.dismiss()
+                        dialog = null
+                    }
+                    .setNeutralButton(R.string.remove_notebook_link) { dialog, which ->
+                        viewModel.setBookLink(book.id)
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            }
+        }
 
         viewModel.errorEvent.observeSingle(viewLifecycleOwner, Observer { error ->
             if (error is BookDelete.NotFound) {
-                CommonActivity.showSnackbar(context, resources.getString(
+                activity?.showSnackbar(resources.getString(
                         R.string.message_deleting_book_failed, error.localizedMessage))
 
             } else if (error != null) {
-                CommonActivity.showSnackbar(context, (error.cause ?: error).localizedMessage)
+                activity?.showSnackbar((error.cause ?: error).localizedMessage)
             }
         })
+
+        viewModel.appBar.mode.observeSingle(viewLifecycleOwner) { mode ->
+            when (mode) {
+                APP_BAR_DEFAULT_MODE -> {
+                    viewAdapter.clearSelection()
+
+                    topToolbarToDefault()
+
+                    if (withActionBar) {
+                        binding.fab.run {
+                            setOnClickListener {
+                                SimpleOneLinerDialog
+                                    .getInstance("name-new-book", R.string.new_notebook, R.string.create, null)
+                                    .show(childFragmentManager, SimpleOneLinerDialog.FRAGMENT_TAG);
+                            }
+
+                            show()
+                        }
+                    } else {
+                        binding.fab.visibility = View.GONE
+                    }
+
+                    sharedMainActivityViewModel.unlockDrawer()
+
+                    appBarBackPressHandler.isEnabled = false
+                }
+
+                APP_BAR_SELECTION_MODE -> {
+                    topToolbarToMainSelection()
+
+                    binding.fab.run {
+                        hide()
+                    }
+
+                    sharedMainActivityViewModel.lockDrawer()
+
+                    appBarBackPressHandler.isEnabled = true
+                }
+            }
+        }
     }
 
     override fun onViewStateRestored(savedInstanceState: Bundle?) {
@@ -413,18 +536,10 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
 
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
 
-        announceChangesToActivity()
+        sharedMainActivityViewModel.setCurrentFragment(FRAGMENT_TAG)
 
         // Re-query if preference changed
         viewModel.refresh(AppPreferences.notebooksSortOrder(context))
-    }
-
-    override fun onPause() {
-        super.onPause()
-
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
-
-        actionMode?.finish()
     }
 
     override fun onDestroyView() {
@@ -444,41 +559,29 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
         listener = null
     }
 
-    /**
-     * Callback for options menu.
-     */
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, menu, inflater)
-
-        inflater.inflate(R.menu.books_actions, menu)
-    }
-
-    /**
-     * Callback for options menu.
-     */
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.books_options_menu_item_import_book -> {
-                listener?.onBookImportRequest()
-                true
+    private val pickFileForBookImport =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) {
+                val guessedBookName = guessBookNameFromUri(uri)
+                SimpleOneLinerDialog
+                    .getInstance("name-imported-book", R.string.import_as, R.string.import_, guessedBookName, bundleOf("uri" to uri))
+                    .show(childFragmentManager, SimpleOneLinerDialog.FRAGMENT_TAG)
+            } else {
+                Log.w(TAG, "Import file not selected")
             }
-
-            else -> super.onOptionsItemSelected(item)
         }
-    }
 
-    override fun getFabAction(): Runnable {
-        return Runnable {
-            listener?.onBookCreateRequest()
+    /**
+     * @return Guessed book name or `null` if it couldn't be guessed
+     */
+    private fun guessBookNameFromUri(uri: Uri): String? {
+        val fileName: String = BookName.getFileName(requireContext(), uri)
+        return if (BookName.isSupportedFormatFileName(fileName)) {
+            val bookName = BookName.fromFileName(fileName)
+            bookName.name
+        } else {
+            null
         }
-    }
-
-    private fun announceChangesToActivity() {
-        sharedMainActivityViewModel.setFragment(
-                FRAGMENT_TAG,
-                getString(R.string.notebooks),
-                null,
-                0) // No books ever selected, as we're using the old floating context menu.
     }
 
     override fun getCurrentDrawerItemId(): String {
@@ -487,26 +590,11 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
 
     interface Listener {
         /**
-         * Request for creating new book.
-         */
-        fun onBookCreateRequest()
-
-        /**
          * Click on a book item has been performed.
          *
          * @param bookId
          */
         fun onBookClicked(bookId: Long)
-
-        fun onBookLinkSetRequest(bookId: Long)
-
-        fun onForceSaveRequest(bookId: Long)
-
-        fun onForceLoadRequest(bookId: Long)
-
-        fun onBookExportRequest(book: Book, format: BookFormat)
-
-        fun onBookImportRequest()
     }
 
     companion object {
@@ -519,17 +607,14 @@ class BooksFragment : Fragment(), Fab, DrawerItem, OnViewHolderClickListener<Boo
          */
         val FRAGMENT_TAG: String = BooksFragment::class.java.name
 
-        private const val ARG_WITH_OPTIONS_MENU = "with_options_menu"
         private const val ARG_WITH_ACTION_BAR = "with_action_bar"
 
-        val instance: BooksFragment
-            get() = getInstance(true, true)
-
-        fun getInstance(withOptionsMenu: Boolean, withActionBar: Boolean): BooksFragment {
+        @JvmStatic
+        @JvmOverloads
+        fun getInstance(withActionBar: Boolean = true): BooksFragment {
             val fragment = BooksFragment()
             val args = Bundle()
 
-            args.putBoolean(ARG_WITH_OPTIONS_MENU, withOptionsMenu)
             args.putBoolean(ARG_WITH_ACTION_BAR, withActionBar)
 
             fragment.arguments = args

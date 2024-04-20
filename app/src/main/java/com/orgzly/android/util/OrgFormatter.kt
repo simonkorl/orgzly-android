@@ -5,9 +5,11 @@ import android.graphics.Typeface
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.*
+import android.text.style.CharacterStyle
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import com.orgzly.BuildConfig
 import com.orgzly.android.prefs.AppPreferences
-import com.orgzly.android.ui.views.TextViewWithMarkup
 import com.orgzly.android.ui.views.style.*
 import com.orgzly.org.datetime.OrgDateTime
 import java.util.regex.Matcher
@@ -27,7 +29,7 @@ object OrgFormatter {
     private const val LINK_SCHEMES = "(?:$SYSTEM_LINK_SCHEMES|$CUSTOM_LINK_SCHEMES)"
 
     private val LINK_REGEX =
-            """($LINK_SCHEMES:\S+)|(\[\[(.+?)](?:\[(.+?)])?])""".toRegex()
+        """(?<![a-zA-Z0-9_@%:])($LINK_SCHEMES:\S+)|(\[\[(.+?)](?:\[(.+?)])?])""".toRegex()
 
     private const val PRE = "- \t('\"{"
     private const val POST = "- \\t.,:!?;'\")}\\["
@@ -55,12 +57,17 @@ object OrgFormatter {
     private const val PLAIN_LIST_CHARS = "-\\+"
     private val CHECKBOXES_PATTERN = Pattern.compile("""^\s*[$PLAIN_LIST_CHARS]\s+(\[[ X]])""", Pattern.MULTILINE)
 
-    private val INACTIVE_DATETIME = "(\\[[0-9]{4,}-[0-9]{2}-[0-9]{2} ?[^\\]\\r\\n>]*?[0-9]{1,2}:[0-9]{2}\\])"
+    private const val INACTIVE_DATETIME = "(\\[[0-9]{4,}-[0-9]{2}-[0-9]{2} ?[^\\]\\r\\n>]*?[0-9]{1,2}:[0-9]{2}\\])"
     private val CLOCKED_TIMES_P = Pattern.compile("(CLOCK: *$INACTIVE_DATETIME) *(-- *$INACTIVE_DATETIME)?( *=> *[0-9]{1,4}:[0-9]{2})?[\\r\\n]*")
+    private val INACTIVE_DATETIME_PATTERN = Pattern.compile(INACTIVE_DATETIME)
 
     private const val FLAGS = Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
 
-    data class Link(val whole: MatchGroup, val link: MatchGroup, val name: MatchGroup)
+    data class MatchLink(
+        val all: MatchGroup,
+        val url: MatchGroup,
+        val name: MatchGroup,
+        val type: Int)
 
     private data class SpanRegion(
             val start: Int,
@@ -68,6 +75,7 @@ object OrgFormatter {
             val content: CharSequence,
             val spans: List<Any?> = listOf())
 
+    // TODO: Pass to OrgFormatter, don't pass context
     private data class Config(
             val style: Boolean = true,
             val withMarks: Boolean = false,
@@ -90,6 +98,8 @@ object OrgFormatter {
     }
 
     private fun parse(str: CharSequence, config: Config): SpannableStringBuilder {
+        val t0 = System.currentTimeMillis()
+
         var ssb = SpannableStringBuilder(str)
 
         /* Must be first, since checkboxes need to know their position in str. */
@@ -103,76 +113,92 @@ object OrgFormatter {
 
         ssb = parseDrawers(ssb, config.foldDrawers)
 
+        if (BuildConfig.LOG_DEBUG) {
+            val t1 = System.currentTimeMillis()
+            LogUtils.d(TAG, "Parsed ${str.length} characters in ${t1-t0}ms")
+        }
+
         return ssb
     }
 
     private fun parseLinks(config: Config, ssb: SpannableStringBuilder): SpannableStringBuilder {
-        return collectRegions(ssb) { spanRegions ->
+        return collectRegions(ssb) { result ->
             LINK_REGEX.findAll(ssb).forEach { match ->
                 val spans = mutableListOf<Any>()
 
-                val link = getLinkFromGroups(match.groups)
+                val matchLink = getLinkFromGroups(match.groups)
 
-                getSpanForLink(config, link.link)?.let { span ->
+                createSpanForLink(config, matchLink)?.let { span ->
                     spans.add(span)
                 }
 
                 // Additional spans could be added here
 
                 val spanRegion = SpanRegion(
-                        link.whole.range.first,
-                        link.whole.range.last + 1,
-                        link.name.value,
+                        matchLink.all.range.first,
+                        matchLink.all.range.last + 1,
+                        matchLink.name.value,
                         spans)
 
-                spanRegions.add(spanRegion)
+                result.add(spanRegion)
             }
         }
     }
 
-    private fun getLinkFromGroups(groups: MatchGroupCollection): Link {
+    private fun getLinkFromGroups(groups: MatchGroupCollection): MatchLink {
         return when {
-            groups[1] != null ->
-                // http://link.com
-                Link(whole = groups[1]!!, link = groups[1]!!, name = groups[1]!!)
+            groups[1] != null -> // http://link.com
+                MatchLink(
+                    all = groups[1]!!,
+                    url = groups[1]!!,
+                    name = groups[1]!!,
+                    type = LinkSpan.TYPE_NO_BRACKETS)
 
-            groups[4] != null ->
-                // [[http://link.com][name]]
-                Link(whole = groups[2]!!, link = groups[3]!!, name = groups[4]!!)
+            groups[4] != null -> // [[http://link.com][name]]
+                MatchLink(
+                    all = groups[2]!!,
+                    url = groups[3]!!,
+                    name = groups[4]!!,
+                    type = LinkSpan.TYPE_BRACKETS_WITH_NAME)
 
-            groups[2] != null ->
-                // [[http://link.com]]
-                Link(whole = groups[2]!!, link = groups[3]!!, name = groups[3]!!)
+            groups[2] != null -> // [[http://link.com]]
+                MatchLink(
+                    all = groups[2]!!,
+                    url = groups[3]!!,
+                    name = groups[3]!!,
+                    type = LinkSpan.TYPE_BRACKETS)
 
             else -> throw IllegalStateException()
         }
     }
 
-    private fun getSpanForLink(config: Config, match: MatchGroup): Any? {
+    private fun createSpanForLink(config: Config, matchLink: MatchLink): Any? {
         if (!config.linkify) {
             return null
         }
 
-        val link = match.value
+        val linkType = matchLink.type
+        val link = matchLink.url.value
+        val name = matchLink.name.value
 
         return when {
-            link.startsWith("file:") ->
-                FileLinkSpan(link.substring(5))
+            link.startsWith(FileLinkSpan.PREFIX) ->
+                FileLinkSpan(linkType, link, name)
 
-            link.startsWith("id:") ->
-                IdLinkSpan(link.substring(3))
+            link.startsWith(IdLinkSpan.PREFIX) ->
+                IdLinkSpan(linkType, link, name)
 
-            link.startsWith("#") ->
-                CustomIdLinkSpan(link.substring(1))
+            link.startsWith(CustomIdLinkSpan.PREFIX) ->
+                CustomIdLinkSpan(linkType, link, name)
 
             link.matches("^(?:$SYSTEM_LINK_SCHEMES):.+".toRegex()) ->
-                URLSpan(link)
+                UrlLinkSpan(linkType, link, name)
 
             isFile(link) ->
-                FileLinkSpan(link)
+                FileOrNotLinkSpan(linkType, link, name)
 
             else ->
-                SearchLinkSpan(link)
+                SearchLinkSpan(linkType, link, name)
         }
     }
 
@@ -185,7 +211,8 @@ object OrgFormatter {
         BOLD,
         ITALIC,
         UNDERLINE,
-        MONOSPACE,
+        VERBATIM,
+        CODE,
         STRIKETHROUGH
     }
 
@@ -204,8 +231,8 @@ object OrgFormatter {
                     '*' -> SpanType.BOLD
                     '/' -> SpanType.ITALIC
                     '_' -> SpanType.UNDERLINE
-                    '=' -> SpanType.MONOSPACE
-                    '~' -> SpanType.MONOSPACE
+                    '=' -> SpanType.VERBATIM
+                    '~' -> SpanType.CODE
                     '+' -> SpanType.STRIKETHROUGH
                     else -> return found
                 }
@@ -219,13 +246,14 @@ object OrgFormatter {
         return found
     }
 
-    private fun newSpan(type: SpanType): Any {
+    private fun newSpan(type: SpanType): CharacterStyle {
         return when (type) {
-            SpanType.BOLD -> StyleSpan(Typeface.BOLD)
-            SpanType.ITALIC -> StyleSpan(Typeface.ITALIC)
-            SpanType.UNDERLINE -> UnderlineSpan()
-            SpanType.MONOSPACE -> TypefaceSpan("monospace")
-            SpanType.STRIKETHROUGH -> StrikethroughSpan()
+            SpanType.BOLD -> BoldSpan()
+            SpanType.ITALIC -> ItalicSpan()
+            SpanType.UNDERLINE -> UnderlinedSpan()
+            SpanType.VERBATIM -> VerbatimSpan()
+            SpanType.CODE -> CodeSpan()
+            SpanType.STRIKETHROUGH -> StrikeSpan()
         }
     }
 
@@ -249,7 +277,7 @@ object OrgFormatter {
                 }
 
             } else {
-                val spans = mutableListOf<Any>()
+                val spans = mutableListOf<CharacterStyle>()
 
                 val found = spanTypes(str) {
                     spans.add(newSpan(it))
@@ -307,7 +335,7 @@ object OrgFormatter {
 
                 // if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, "Found drawer", name, content, "All:'${m.group()}'")
 
-                val drawerSpanned = TextViewWithMarkup.drawerSpanned(name, content, foldDrawers)
+                val drawerSpanned = drawerSpanned(name, content, foldDrawers)
 
                 val start = if (m.group().startsWith("\n")) m.start() + 1 else m.start()
                 val end = if (m.group().endsWith("\n")) m.end() - 1 else m.end()
@@ -338,11 +366,10 @@ object OrgFormatter {
                 }
 
                 // Create spanned string
-                val str = SpannableString(region.content)
-
-                // Set spans
-                region.spans.forEach { span ->
-                    str.setSpan(span, 0, str.length, FLAGS)
+                val str = SpannableString(region.content).also { str ->
+                    region.spans.forEach { span ->
+                        str.setSpan(span, 0, str.length, FLAGS)
+                    }
                 }
 
                 // Append spanned string
@@ -418,11 +445,9 @@ object OrgFormatter {
                 val pos = getLastClockInPosition(logbookContent)
 
                 // If we cannot find an already clocked entry, we add one
-                if(pos.isEmpty()) {
+                if (pos.isEmpty()) {
                     StringBuilder(content).insert(m.start(2), clockStr + "\n").toString()
-                }
-                // Otherwise, we just return the original content
-                else {
+                } else {
                     content
                 }
             } else {
@@ -433,8 +458,8 @@ object OrgFormatter {
 
     @JvmStatic
     fun clockOut(content: String?): String {
-        val clock_out = OrgDateTime(false)
-        val currentTime = clock_out.toString()
+        val clockOut = OrgDateTime(false)
+        val currentTime = clockOut.toString()
 
         return if (content.isNullOrEmpty()) {
             ""
@@ -446,18 +471,18 @@ object OrgFormatter {
                 val pos = getLastClockInPosition(logbookContent)
 
                 // If we find an already clocked entry, we clock-out
-                if(pos.isNotEmpty()) {
+                if (pos.isNotEmpty()) {
                     // Find the timestamp to compute the difference
-                    val m2 = Pattern.compile(INACTIVE_DATETIME).matcher(logbookContent.substring(pos[0], pos[1]))
+                    val m2 = INACTIVE_DATETIME_PATTERN.matcher(logbookContent.substring(pos[0], pos[1]))
 
                     if (m2.find()) {
-                        val clock_in = OrgDateTime.parseOrNull(m2.group(1))
+                        val clockIn = OrgDateTime.parseOrNull(m2.group(1))
 
-                        val time_in = clock_in.getCalendar()
-                        val time_out = clock_out.getCalendar()
+                        val timeIn = clockIn.calendar
+                        val timeOut = clockOut.calendar
 
                         // Reported times are in milliseconds
-                        val diff = time_out.time.time - time_in.time.time
+                        val diff = timeOut.time.time - timeIn.time.time
 
                         val minute = 1000 * 60
                         val hour = minute * 60
@@ -467,21 +492,15 @@ object OrgFormatter {
                         val elapsedMinutes: Long = diff2 / minute
 
                         StringBuilder(content).insert(m.start(2) + pos[1], "--" + currentTime + " => " + elapsedHours + ":" + String.format("%02d", elapsedMinutes)).toString()
-                    }
-                    // This should never happen, but put as a precaution<
-                    else
-                    {
+
+                    } else { // This should never happen, but put as a precaution
                         StringBuilder(content).insert(m.start(2) + pos[1], "--" + currentTime).toString()
                     }
 
-                }
-                // Otherwise, we just return the original content
-                else {
+                } else {
                     content
                 }
-            }
-            // Otherwise, we just return the original content
-            else {
+            } else {
                 content
             }
         }
@@ -492,7 +511,6 @@ object OrgFormatter {
         return if (content.isNullOrEmpty()) {
             ""
         } else {
-
             val m = LOGBOOK_DRAWER_PATTERN.matcher(content)
 
             if (m.find()) {
@@ -500,26 +518,21 @@ object OrgFormatter {
                 val pos = getLastClockInPosition(logbookContent)
 
                 // If we find an already clocked entry, we cancel it
-                if(pos.isNotEmpty()) {
+                if (pos.isNotEmpty()) {
                     val updatedContent = StringBuilder(content).delete(m.start(2) + pos[0], m.start(2) + pos[1] + 1).toString()
 
                     // If the LOGBOOK ends up being empty
                     // We delete it like Org would do
                     val endPos = updatedContent.indexOf(":END:", m.start(2))
-                    if( endPos == (m.start(2)) ) {
+                    if (endPos == (m.start(2)) ) {
                         StringBuilder(updatedContent).delete(m.start(0), m.start(0) + endPos + ":END:".length + 2).toString()
-                    }
-                    else {
+                    } else {
                         updatedContent
                     }
-                }
-                // Otherwise, we just return the original content
-                else {
+                } else {
                     content
                 }
-            }
-            // Otherwise, we just return the original content
-            else {
+            } else {
                 content
             }
         }
@@ -531,6 +544,51 @@ object OrgFormatter {
         val to = if (toState.isNullOrEmpty()) "" else toState
 
         return String.format("- State %-12s from %-12s %s", "\"$to\"", "\"$from\"", time)
+    }
+
+    fun drawerSpanned(name: String, content: CharSequence, isFolded: Boolean): Spanned {
+        val builder = SpannableStringBuilder()
+
+        if (isFolded) {
+            builder.append(":$name:…")
+
+            builder.setSpan(
+                DrawerMarkerSpan.Start(),
+                0,
+                builder.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        } else {
+            builder.append(":$name:")
+
+            builder.setSpan(
+                DrawerMarkerSpan.Start(),
+                0,
+                builder.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+            builder.append("\n").append(content).append("\n").append(":END:")
+        }
+
+        builder.setSpan(
+            DrawerSpan(name, content, isFolded),
+            0,
+            builder.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        return builder
+    }
+
+    fun checkboxSpanned(content: CharSequence, rawStart: Int, rawEnd: Int): Spanned {
+        val beginSpannable = SpannableString(content)
+
+        beginSpannable.setSpan(
+            CheckboxSpan(content, rawStart, rawEnd),
+            0,
+            beginSpannable.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        return beginSpannable
     }
 
     private val TAG = OrgFormatter::class.java.name

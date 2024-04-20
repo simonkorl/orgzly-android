@@ -5,9 +5,15 @@
     tools:ignore="AlwaysShowAction">
 
     <item
-        android:id="@+id/home"
-        android:icon="?attr/ic_storage_24dp"
+        android:id="@+id/open_home"
+        android:icon="@drawable/ic_storage"
         app:showAsAction="always"
         android:title="@string/primary_storage"/>
+
+    <item
+        android:id="@+id/new_folder"
+        android:icon="@drawable/ic_create_new_folder"
+        app:showAsAction="always"
+        android:title="@string/new_folder"/>
 
 </menu>

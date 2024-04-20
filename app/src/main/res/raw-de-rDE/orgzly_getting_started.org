@@ -22,6 +22,8 @@ Halten Sie das Symbol gedrückt, um den gesamten Unterbaum aufzuklappen.
 
 Wenn Sie mit der Abfrage „t.Schlagwort1“ nach Notizen mit dem Schlagwort „Schlagwort1“ suchen, wird diese Notiz in die Suchergebnisse aufgenommen.
 
+*** Eine Notiz mit dem Schlagwort =ARCHIVE= ist ausgegraut :ARCHIVE:
+
 ** TODO-Notizen können einen Status besitzen
 
 Sie können eine beliebige Anzahl zu verwendender Status konfigurieren: TODO, NEXT, DONE usw.
@@ -50,11 +52,11 @@ Die verschiedenen Prioritätsstufen können in den Einstellungen verändert werd
 
 ** Notizen können Links enthalten
 
-Wählen Sie eine Telefonnummer (tel:555-0199), senden Sie SMS (sms:555-0199), schreiben Sie eine E-Mail (mailto:support@orgzly.com) oder besuchen Sie eine Webseite ([[http://www.orgzly.com][Orgzly.com]]).
+Wählen Sie eine Telefonnummer (tel:555-0199), senden Sie SMS (sms:555-0199), schreiben Sie eine E-Mail (mailto:support@orgzly.com) oder besuchen Sie eine Webseite ([[https://www.orgzly.com][Orgzly.com]]).
 
 Sie können auch auf eine andere Notiz oder ein anderes Notizbuch innerhalb der App verweisen.
 
-Siehe http://www.orgzly.com/help#links für weitere Informationen.
+Siehe https://www.orgzly.com/help#links für weitere Informationen.
 
 ** Grundlegende typografische Hervorhebungen werden unterstützt
 
@@ -73,7 +75,7 @@ Klicken Sie auf das Kontrollkästchen, um es zu wechseln. Wenn Sie aus einer Zei
 
 Sie können Notizen nach Status (state), Schlagwort (tag), Termin (scheduled) oder Frist (deadline) usw. durchsuchen.
 
-Besuchen Sie http://www.orgzly.com/help#search, um mehr zu erfahren.
+Besuchen Sie https://www.orgzly.com/help#search, um mehr zu erfahren.
 
 ** Suchabfragen können für den Schnellzugriff gespeichert werden
 

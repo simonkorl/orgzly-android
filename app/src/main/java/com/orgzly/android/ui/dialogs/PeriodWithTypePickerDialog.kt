@@ -1,6 +1,5 @@
 package com.orgzly.android.ui.dialogs
 
-import android.app.AlertDialog
 import android.content.Context
 import android.content.DialogInterface
 import android.os.Bundle
@@ -8,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import androidx.annotation.ArrayRes
 import androidx.annotation.StringRes
+import androidx.appcompat.app.AlertDialog
 import com.orgzly.R
 import com.orgzly.databinding.DialogPeriodWithTypeBinding
 import com.orgzly.org.datetime.OrgInterval
@@ -20,7 +20,7 @@ abstract class PeriodWithTypePickerDialog(
         context: Context,
         @StringRes private val titleId: Int,
         @StringRes private val descriptionId: Int,
-        @ArrayRes private val typesId: Int,
+        @ArrayRes private val typesId: Int?,
         @ArrayRes private val typesDescriptionsId: Int,
         private val initialValue: String
 ) : AlertDialog(context) {
@@ -49,15 +49,19 @@ abstract class PeriodWithTypePickerDialog(
             cancel()
         }
 
+        if (typesId != null) {
+            val types = context.resources.getStringArray(typesId)
 
-        val types = context.resources.getStringArray(typesId)
-        binding.typePicker.apply {
-            minValue = 0
-            maxValue = types.size - 1
-            displayedValues = types
-            setOnValueChangedListener { _, _, newVal ->
-                setTypeDescription(newVal)
+            binding.typePicker.apply {
+                minValue = 0
+                maxValue = types.size - 1
+                displayedValues = types
+                setOnValueChangedListener { _, _, newVal ->
+                    setTypeDescription(newVal)
+                }
             }
+        } else {
+            binding.typePicker.visibility = View.GONE
         }
 
         binding.valuePicker.apply {

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<layout xmlns:android="http://schemas.android.com/apk/res/android">
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/CoordinatorLayoutFitsSystemWindows">
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipeContainer"
@@ -10,8 +13,7 @@
         <ViewFlipper
             android:id="@+id/fragment_books_view_flipper"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="?attr/fragment_books_bg_color">
+            android:layout_height="match_parent">
 
             <ProgressBar style="@style/LoadingProgressBar" />
 
@@ -20,24 +22,42 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
-                android:paddingLeft="@dimen/cards_margin"
-                android:paddingRight="@dimen/cards_margin"
-                android:paddingTop="@dimen/cards_margin"
-                android:paddingBottom="@dimen/list_view_with_fab_bottom_padding" />
+                android:paddingStart="@dimen/screen_edge"
+                android:paddingEnd="@dimen/screen_edge"
+                android:paddingTop="?attr/actionBarSize"
+                android:paddingBottom="@dimen/padding_bottom_for_fab" />
 
             <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
-
                 <TextView
                     style="@style/BigCenteredText"
-                    android:paddingBottom="@dimen/list_view_with_fab_bottom_padding"
                     android:text="@string/no_notebooks" />
-
             </ScrollView>
 
         </ViewFlipper>
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-</layout>
+    <!-- Top toolbar -->
+    <!-- TODO: DRY -->
+    <com.google.android.material.appbar.AppBarLayout
+        style="@style/AppBarLayoutStyle">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/top_toolbar"
+            style="@style/TopToolbar"
+            app:menu="@menu/books_actions"
+            app:navigationIcon="@drawable/ic_menu" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/sync_toolbar_progress"
+            style="@style/SyncProgressIndicator" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab"
+        style="@style/Fab.Add" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

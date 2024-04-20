@@ -1,17 +1,17 @@
 package com.orgzly.android.ui.notes.book
 
 import android.annotation.SuppressLint
-import android.app.AlertDialog
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.util.Log
 import android.view.*
-import androidx.appcompat.view.ActionMode
-import androidx.appcompat.widget.Toolbar
+import androidx.activity.OnBackPressedCallback
 import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModelProviders
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.orgzly.BuildConfig
 import com.orgzly.R
 import com.orgzly.android.BookUtils
@@ -19,21 +19,29 @@ import com.orgzly.android.db.NotesClipboard
 import com.orgzly.android.db.entity.Book
 import com.orgzly.android.db.entity.NoteView
 import com.orgzly.android.prefs.AppPreferences
-import com.orgzly.android.ui.*
+import com.orgzly.android.sync.SyncRunner
+import com.orgzly.android.ui.CommonActivity
+import com.orgzly.android.ui.NotePlace
+import com.orgzly.android.ui.Place
 import com.orgzly.android.ui.dialogs.TimestampDialogFragment
 import com.orgzly.android.ui.drawer.DrawerItem
 import com.orgzly.android.ui.main.SharedMainActivityViewModel
+import com.orgzly.android.ui.main.setupSearchView
+import com.orgzly.android.ui.notes.ItemGestureDetector
 import com.orgzly.android.ui.notes.NoteItemViewHolder
+import com.orgzly.android.ui.notes.NotePopup
 import com.orgzly.android.ui.notes.NotesFragment
-import com.orgzly.android.ui.notes.quickbar.ItemGestureDetector
-import com.orgzly.android.ui.notes.quickbar.QuickBarListener
-import com.orgzly.android.ui.notes.quickbar.QuickBars
+import com.orgzly.android.ui.notes.book.BookViewModel.Companion.APP_BAR_DEFAULT_MODE
+import com.orgzly.android.ui.notes.book.BookViewModel.Companion.APP_BAR_SELECTION_MODE
+import com.orgzly.android.ui.notes.book.BookViewModel.Companion.APP_BAR_SELECTION_MOVE_MODE
 import com.orgzly.android.ui.refile.RefileFragment
+import com.orgzly.android.ui.settings.SettingsActivity
 import com.orgzly.android.ui.util.ActivityUtils
+import com.orgzly.android.ui.util.setDecorFitsSystemWindowsForBottomToolbar
 import com.orgzly.android.ui.util.setup
 import com.orgzly.android.ui.util.styledAttributes
 import com.orgzly.android.util.LogUtils
-import com.orgzly.databinding.FragmentNotesBookBinding
+import com.orgzly.databinding.FragmentBookBinding
 
 
 /**
@@ -42,15 +50,11 @@ import com.orgzly.databinding.FragmentNotesBookBinding
  */
 class BookFragment :
         NotesFragment(),
-        Fab,
         TimestampDialogFragment.OnDateTimeSetListener,
         DrawerItem,
-        ActionMode.Callback,
-        BottomActionBar.Callback,
-        BookAdapter.OnClickListener,
-        QuickBarListener {
+        BookAdapter.OnClickListener {
 
-    private lateinit var binding: FragmentNotesBookBinding
+    private lateinit var binding: FragmentBookBinding
 
     private var listener: Listener? = null
 
@@ -70,11 +74,17 @@ class BookFragment :
         return listener
     }
 
+    // TODO: Move to ViewModel
+
     var currentBook: Book? = null
 
     private var mBookId: Long = 0
 
-    private var mActionModeTag: String? = null
+    private val appBarBackPressHandler = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            viewModel.appBar.handleOnBackPressed()
+        }
+    }
 
     /**
      * Mandatory empty constructor for the fragment manager to instantiate the
@@ -91,7 +101,6 @@ class BookFragment :
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, context)
 
         listener = activity as Listener
-        actionModeListener = activity as ActionModeListener
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,44 +108,39 @@ class BookFragment :
 
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, savedInstanceState)
 
-        sharedMainActivityViewModel = ViewModelProviders.of(requireActivity())
+        sharedMainActivityViewModel = ViewModelProvider(requireActivity())
                 .get(SharedMainActivityViewModel::class.java)
-
-        /* Would like to add items to the Options Menu.
-         * Required (for fragments only) to receive onCreateOptionsMenu() call.
-         */
-        setHasOptionsMenu(true)
 
         parseArguments()
 
         val factory = BookViewModelFactory.forBook(dataRepository, mBookId)
-        viewModel = ViewModelProviders.of(this, factory).get(BookViewModel::class.java)
+        viewModel = ViewModelProvider(this, factory).get(BookViewModel::class.java)
 
-        if (savedInstanceState != null && savedInstanceState.getBoolean("actionModeMove", false)) {
-            mActionModeTag = "M"
-        }
+        requireActivity().onBackPressedDispatcher.addCallback(this, appBarBackPressHandler)
+        requireActivity().onBackPressedDispatcher.addCallback(this, notePopupDismissOnBackPress)
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, savedInstanceState)
 
-        binding = FragmentNotesBookBinding.inflate(inflater, container, false)
+        binding = FragmentBookBinding.inflate(inflater, container, false)
 
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        val quickBars = QuickBars(binding.root.context, true)
+        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, savedInstanceState)
 
-        viewAdapter = BookAdapter(binding.root.context, this, quickBars, inBook = true)
-        viewAdapter.setHasStableIds(true)
+        viewAdapter = BookAdapter(mBookId, binding.root.context, this, inBook = true).apply {
+            setHasStableIds(true)
+        }
 
         // Restores selection, requires adapter
         super.onViewCreated(view, savedInstanceState)
 
         layoutManager = LinearLayoutManager(context)
 
-        binding.fragmentNotesBookRecyclerView.let { rv ->
+        binding.fragmentBookRecyclerView.let { rv ->
             rv.layoutManager = layoutManager
             rv.adapter = viewAdapter
 
@@ -148,47 +152,31 @@ class BookFragment :
             rv.itemAnimator = null
 
             rv.addOnItemTouchListener(ItemGestureDetector(rv.context, object: ItemGestureDetector.Listener {
-                override fun onFling(direction: Int, x: Float, y: Float) {
-                    rv.findChildViewUnder(x, y)?.let { itemView ->
+                override fun onSwipe(direction: Int, e1: MotionEvent, e2: MotionEvent) {
+                    rv.findChildViewUnder(e1.x, e1.y)?.let { itemView ->
                         rv.findContainingViewHolder(itemView)?.let { vh ->
                             (vh as? NoteItemViewHolder)?.let {
-                                quickBars.onFling(it, direction, this@BookFragment)
+                                showPopupWindow(vh.itemId, NotePopup.Location.BOOK, direction, itemView, e1, e2) { noteId, buttonId ->
+                                    handleActionItemClick(setOf(noteId), buttonId)
+                                }
                             }
                         }
                     }
                 }
             }))
-
-//            val itemTouchHelper = NoteItemTouchHelper(true, object : NoteItemTouchHelper.Listener {
-//                override fun onSwiped(viewHolder: NoteItemViewHolder, direction: Int) {
-//                    listener?.onNoteOpen(viewHolder.itemId)
-//                }
-//            })
-//
-//            itemTouchHelper.attachToRecyclerView(rv)
         }
 
         binding.swipeContainer.setup()
-    }
 
-    override fun onQuickBarButtonClick(buttonId: Int, itemId: Long) {
-        handleActionItemClick(buttonId, actionModeListener?.actionMode, setOf(itemId))
-    }
-
-    override fun onActivityCreated(savedInstanceState: Bundle?) {
-        super.onActivityCreated(savedInstanceState)
-
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, savedInstanceState)
-
-        viewModel.viewState.observe(viewLifecycleOwner, Observer { state ->
-            if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, "Observed load state: $state")
+        viewModel.flipperDisplayedChild.observe(viewLifecycleOwner, Observer { child ->
+            if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, "Observed flipper displayed child: $child")
 
             binding.fragmentBookViewFlipper.apply {
-                displayedChild = when (state) {
-                    BookViewModel.ViewState.LOADING -> 0
-                    BookViewModel.ViewState.LOADED -> 1
-                    BookViewModel.ViewState.EMPTY -> 2
-                    BookViewModel.ViewState.DOES_NOT_EXIST -> 3
+                displayedChild = when (child) {
+                    BookViewModel.FlipperDisplayedChild.LOADING -> 0
+                    BookViewModel.FlipperDisplayedChild.LOADED -> 1
+                    BookViewModel.FlipperDisplayedChild.EMPTY -> 2
+                    BookViewModel.FlipperDisplayedChild.DOES_NOT_EXIST -> 3
                     else -> 1
                 }
             }
@@ -203,8 +191,6 @@ class BookFragment :
 
             this.currentBook = book
 
-            announceChangesToActivity()
-
             viewAdapter.setPreface(book)
 
             if (notes != null) {
@@ -215,28 +201,17 @@ class BookFragment :
 
                 viewAdapter.getSelection().removeNonExistent(ids)
 
-                activity?.invalidateOptionsMenu()
-
-                actionModeListener?.updateActionModeForSelection(
-                        viewAdapter.getSelection().count, this)
-
-                actionModeListener?.actionMode?.let { actionMode ->
-                    if (mActionModeTag != null) {
-                        actionMode.tag = "M" // TODO: Ugh.
-                        actionMode.invalidate()
-                        mActionModeTag = null
-                    }
-                }
+                viewModel.appBar.toModeFromSelectionCount(viewAdapter.getSelection().count)
 
                 scrollToNoteIfSet(arguments?.getLong(ARG_NOTE_ID, 0) ?: 0)
             }
 
-            updateViewState(notes)
+            setFlipperDisplayedChild(notes)
         })
 
         viewModel.refileRequestEvent.observeSingle(viewLifecycleOwner, Observer {
             RefileFragment.getInstance(it.selected, it.count)
-                    .show(requireFragmentManager(), RefileFragment.FRAGMENT_TAG)
+                    .show(childFragmentManager, RefileFragment.FRAGMENT_TAG)
         })
 
         viewModel.notesDeleteRequest.observeSingle(viewLifecycleOwner, Observer { pair ->
@@ -246,7 +221,7 @@ class BookFragment :
             val question = resources.getQuantityString(
                     R.plurals.delete_note_or_notes_with_count_question, count, count)
 
-            dialog = AlertDialog.Builder(context)
+            dialog = MaterialAlertDialogBuilder(requireContext())
                     .setTitle(question)
                     .setPositiveButton(R.string.delete) { _, _ ->
                         listener?.onNotesDeleteRequest(mBookId, ids)
@@ -254,23 +229,77 @@ class BookFragment :
                     .setNegativeButton(R.string.cancel) { _, _ -> }
                     .show()
         })
+
+        viewModel.appBar.mode.observeSingle(viewLifecycleOwner) { mode ->
+            when (mode) {
+                APP_BAR_DEFAULT_MODE -> {
+                    viewAdapter.clearSelection()
+
+                    topToolbarToDefault()
+                    bottomToolbarToDefault()
+
+                    binding.fab.run {
+                        if (currentBook != null) {
+                            setOnClickListener {
+                                listener?.onNoteNewRequest(NotePlace(mBookId))
+                            }
+                            show()
+                        } else {
+                            hide()
+                        }
+                    }
+
+                    sharedMainActivityViewModel.unlockDrawer()
+
+                    appBarBackPressHandler.isEnabled = false
+                }
+
+                APP_BAR_SELECTION_MODE -> {
+                    topToolbarToMainSelection()
+                    bottomToolbarToMainSelection()
+
+                    binding.fab.hide()
+
+                    sharedMainActivityViewModel.lockDrawer()
+
+                    appBarBackPressHandler.isEnabled = true
+                }
+
+                APP_BAR_SELECTION_MOVE_MODE -> {
+                    topToolbarToNextSelection()
+                    bottomToolbarToNextSelection()
+
+                    binding.fab.hide()
+
+                    sharedMainActivityViewModel.lockDrawer()
+
+                    appBarBackPressHandler.isEnabled = true
+                }
+            }
+        }
     }
 
-    private fun updateViewState(notes: List<NoteView>?) {
+    private fun setFlipperDisplayedChild(notes: List<NoteView>?) {
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
 
         if (currentBook == null) {
-            viewModel.setViewState(BookViewModel.ViewState.DOES_NOT_EXIST)
+            viewModel.setFlipperDisplayedChild(BookViewModel.FlipperDisplayedChild.DOES_NOT_EXIST)
 
         } else if (notes == null) {
-            viewModel.setViewState(BookViewModel.ViewState.LOADING)
+            viewModel.setFlipperDisplayedChild(BookViewModel.FlipperDisplayedChild.LOADING)
 
-        } else if (viewAdapter.isPrefaceDisplayed() || !notes.isNullOrEmpty()) {
-            viewModel.setViewState(BookViewModel.ViewState.LOADED)
+        } else if (notes.isNotEmpty() || viewAdapter.isPrefaceDisplayed()) {
+            viewModel.setFlipperDisplayedChild(BookViewModel.FlipperDisplayedChild.LOADED)
 
         } else {
-            viewModel.setViewState(BookViewModel.ViewState.EMPTY)
+            viewModel.setFlipperDisplayedChild(BookViewModel.FlipperDisplayedChild.EMPTY)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        sharedMainActivityViewModel.setCurrentFragment(FRAGMENT_TAG)
     }
 
     override fun onDestroyView() {
@@ -302,78 +331,6 @@ class BookFragment :
     }
 
     /*
-     * Options menu.
-     */
-
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, menu, inflater)
-
-        inflater.inflate(R.menu.book_actions, menu)
-
-        ActivityUtils.keepScreenOnUpdateMenuItem(
-                activity,
-                menu,
-                menu.findItem(R.id.books_options_keep_screen_on))
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu) {
-        super.onPrepareOptionsMenu(menu)
-
-        /* Remove some menu items if book doesn't exist or it doesn't contain any notes. */
-
-        if (currentBook == null || viewAdapter.getDataItemCount() == 0) {
-            menu.removeItem(R.id.books_options_menu_item_cycle_visibility)
-        }
-
-        if (currentBook == null) {
-            menu.removeItem(R.id.books_options_menu_book_preface)
-        }
-
-        // Hide paste button if clipboard is empty, update title if not
-        menu.findItem(R.id.book_actions_paste)?.apply {
-            val count = NotesClipboard.count()
-
-            if (count == 0) {
-                isVisible = false
-
-            } else {
-                title = resources.getQuantityString(
-                        R.plurals.paste_note_or_notes_with_count, count, count)
-
-                isVisible = true
-            }
-        }
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, item)
-
-        when (item.itemId) {
-            R.id.books_options_menu_item_cycle_visibility -> {
-                viewModel.cycleVisibility()
-                return true
-            }
-
-            R.id.book_actions_paste -> {
-                pasteNotes(Place.UNDER, 0)
-                return true
-            }
-
-            R.id.books_options_menu_book_preface -> {
-                onPrefaceClick()
-                return true
-            }
-
-            R.id.books_options_keep_screen_on -> {
-                dialog = ActivityUtils.keepScreenOnToggle(activity, item)
-                return true
-            }
-
-            else -> return super.onOptionsItemSelected(item)
-        }
-    }
-
-    /*
      * Actions
      */
 
@@ -396,8 +353,7 @@ class BookFragment :
      * @param place [Place]
      */
     private fun pasteNotes(place: Place, noteId: Long) {
-        viewAdapter.getSelection().clear()
-        viewAdapter.notifyDataSetChanged() // FIXME
+        viewAdapter.clearSelection()
 
         listener?.onNotesPasteRequest(mBookId, noteId, place)
     }
@@ -414,7 +370,7 @@ class BookFragment :
                 if (id == noteId) {
                     scrollToPosition(i)
 
-                    binding.fragmentNotesBookRecyclerView.post {
+                    binding.fragmentBookRecyclerView.post {
                         spotlightScrolledToView(i)
                     }
 
@@ -445,8 +401,8 @@ class BookFragment :
 
     @SuppressLint("ClickableViewAccessibility")
     private fun highlightScrolledToView(view: View) {
-        val selectionBgColor = view.context.styledAttributes(R.styleable.ColorScheme) { typedArray ->
-            typedArray.getColor(R.styleable.ColorScheme_item_spotlighted_bg_color, 0)
+        val selectionBgColor = view.context.styledAttributes(intArrayOf(R.attr.colorSurface)) { typedArray ->
+            typedArray.getColor(0, 0)
         }
 
         view.setBackgroundColor(selectionBgColor)
@@ -458,23 +414,6 @@ class BookFragment :
                 runOnTouchEvent = null
             }
         }
-    }
-
-    private fun announceChangesToActivity() {
-        sharedMainActivityViewModel.setFragment(
-                FRAGMENT_TAG,
-                BookUtils.getFragmentTitleForBook(currentBook),
-                BookUtils.getFragmentSubtitleForBook(context, currentBook),
-                viewAdapter.getSelection().count)
-    }
-
-    override fun getFabAction(): Runnable? {
-        return if (currentBook != null) {
-            Runnable {
-                listener?.onNoteNewRequest(NotePlace(mBookId))
-            }
-        } else
-            null
     }
 
     private fun delete(ids: Set<Long>) {
@@ -512,13 +451,10 @@ class BookFragment :
     private fun toggleNoteSelection(position: Int, noteView: NoteView) {
         val noteId = noteView.note.id
 
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, listener, noteView)
-
         viewAdapter.getSelection().toggle(noteId)
         viewAdapter.notifyItemChanged(position)
 
-        actionModeListener?.updateActionModeForSelection(
-                viewAdapter.getSelection().count, this)
+        viewModel.appBar.toModeFromSelectionCount(viewAdapter.getSelection().count)
     }
 
     override fun onPrefaceClick() {
@@ -529,174 +465,238 @@ class BookFragment :
         }
     }
 
-    override fun onCreateActionMode(actionMode: ActionMode, menu: Menu): Boolean {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, actionMode, menu)
+    private fun topToolbarToDefault() {
+        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
 
-        val inflater = actionMode.menuInflater
+        binding.topToolbar.run {
+            menu.clear()
+            inflateMenu(R.menu.book_actions)
 
-        inflater.inflate(R.menu.book_cab, menu)
+            ActivityUtils.keepScreenOnUpdateMenuItem(activity, menu)
 
-        sharedMainActivityViewModel.lockDrawer()
+            setNavigationIcon(R.drawable.ic_menu)
 
-        return true
-    }
-
-    /**
-     * Called each time the action mode is shown. Always called after onCreateActionMode,
-     * but may be called multiple times if the mode is invalidated.
-     */
-    override fun onPrepareActionMode(actionMode: ActionMode, menu: Menu): Boolean {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, actionMode.tag)
-
-        /* Update action mode with number of selected items. */
-        actionMode.title = viewAdapter.getSelection().count.toString()
-
-        val inflater = actionMode.menuInflater
-
-        menu.clear()
-
-        if ("M" == actionMode.tag) { // Movement menu
-            inflater.inflate(R.menu.book_cab_moving, menu)
-        } else {
-            inflater.inflate(R.menu.book_cab, menu)
-        }
-
-        /* Hide some items if multiple notes are selected. */
-        for (id in ITEMS_HIDDEN_ON_MULTIPLE_SELECTED_NOTES) {
-            val item = menu.findItem(id)
-            if (item != null) {
-                item.isVisible = viewAdapter.getSelection().count == 1
+            setNavigationOnClickListener {
+                sharedMainActivityViewModel.openDrawer()
             }
+
+            if (currentBook == null || viewAdapter.getDataItemCount() == 0) {
+                menu.removeItem(R.id.books_options_menu_item_cycle_visibility)
+            }
+
+            if (currentBook == null) {
+                menu.removeItem(R.id.books_options_menu_book_preface)
+            }
+
+            // Hide paste button if clipboard is empty, update title if not
+            menu.findItem(R.id.book_actions_paste)?.apply {
+                val count = NotesClipboard.count()
+
+                if (count == 0) {
+                    isVisible = false
+
+                } else {
+                    title = resources.getQuantityString(
+                        R.plurals.paste_note_or_notes_with_count, count, count)
+
+                    isVisible = true
+                }
+            }
+
+            binding.topToolbar.setOnMenuItemClickListener { menuItem ->
+                handleActionItemClick(menuItem.itemId, menuItem)
+                true
+            }
+
+            requireActivity().setupSearchView(menu)
+
+            setOnClickListener {
+                scrollToPosition(0)
+            }
+
+            title = BookUtils.getFragmentTitleForBook(currentBook)
         }
-
-        announceChangesToActivity()
-
-        return true
     }
 
-    override fun onActionItemClicked(actionMode: ActionMode, menuItem: MenuItem): Boolean {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, actionMode, menuItem)
-
-        handleActionItemClick(menuItem.itemId, actionMode, viewAdapter.getSelection().getIds())
-
-        return true
-    }
-
-    override fun onDestroyActionMode(actionMode: ActionMode) {
+    private fun bottomToolbarToDefault() {
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
 
-        viewAdapter.getSelection().clear()
-        viewAdapter.notifyDataSetChanged() // FIXME
+        binding.bottomToolbar.visibility = View.GONE
 
-        actionModeListener?.actionModeDestroyed()
-
-        announceChangesToActivity()
-
-        sharedMainActivityViewModel.unlockDrawer()
+        activity?.setDecorFitsSystemWindowsForBottomToolbar(binding.bottomToolbar.visibility)
     }
 
-    override fun onInflateBottomActionMode(toolbar: Toolbar) {
+    private fun topToolbarToMainSelection() {
         if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
 
-        toolbar.inflateMenu(R.menu.bottom_action_bar_book)
+        binding.topToolbar.run {
+            menu.clear()
+            inflateMenu(R.menu.book_cab_top)
+            hideMenuItemsBasedOnSelection(menu)
 
+            setNavigationIcon(R.drawable.ic_arrow_back)
+
+            setNavigationOnClickListener {
+                viewModel.appBar.handleOnBackPressed()
+            }
+
+            setOnMenuItemClickListener { menuItem ->
+                handleActionItemClick(viewAdapter.getSelection().getIds(), menuItem.itemId, menuItem)
+                true
+            }
+
+            setOnClickListener(null)
+
+            title = viewAdapter.getSelection().count.toString()
+        }
+    }
+
+    private fun bottomToolbarToMainSelection() {
+        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
+
+        binding.bottomToolbar.run {
+            menu.clear()
+            inflateMenu(R.menu.book_cab_bottom)
+            hideMenuItemsBasedOnSelection(menu)
+
+            setOnMenuItemClickListener { menuItem ->
+                handleActionItemClick(viewAdapter.getSelection().getIds(), menuItem.itemId, menuItem)
+                true
+            }
+
+            visibility = View.VISIBLE
+
+            activity?.setDecorFitsSystemWindowsForBottomToolbar(visibility)
+        }
+    }
+
+    private fun topToolbarToNextSelection() {
+        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
+
+        binding.topToolbar.run {
+            menu.clear()
+            inflateMenu(R.menu.book_cab_moving)
+            hideMenuItemsBasedOnSelection(menu)
+
+            setNavigationIcon(R.drawable.ic_arrow_back)
+
+            setNavigationOnClickListener {
+                viewModel.appBar.handleOnBackPressed()
+            }
+
+            setOnMenuItemClickListener { menuItem ->
+                handleActionItemClick(
+                    viewAdapter.getSelection().getIds(),
+                    menuItem.itemId,
+                    menuItem
+                )
+                true
+            }
+
+            setOnClickListener(null)
+
+            title = viewAdapter.getSelection().count.toString()
+        }
+    }
+
+    private fun bottomToolbarToNextSelection() {
+        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG)
+
+        binding.bottomToolbar.run {
+            menu.clear()
+            inflateMenu(R.menu.book_cab_bottom)
+            hideMenuItemsBasedOnSelection(menu)
+
+            setOnMenuItemClickListener { menuItem ->
+                handleActionItemClick(viewAdapter.getSelection().getIds(), menuItem.itemId, menuItem)
+                false
+            }
+
+            visibility = View.VISIBLE
+
+            activity?.setDecorFitsSystemWindowsForBottomToolbar(visibility)
+        }
+    }
+
+    private fun hideMenuItemsBasedOnSelection(menu: Menu) {
         // Hide buttons that can't be used when multiple notes are selected
-        listOf(R.id.bottom_action_bar_new).forEach { id ->
-            toolbar.menu.findItem(id)?.isVisible = viewAdapter.getSelection().count <= 1
+        for (id in listOf(R.id.paste, R.id.new_note)) {
+            menu.findItem(id)?.isVisible = viewAdapter.getSelection().count == 1
         }
-
-        ActivityUtils.distributeToolbarItems(activity, toolbar)
     }
 
-    override fun onBottomActionItemClicked(id: Int) {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, id)
-
-        handleActionItemClick(id, actionModeListener?.actionMode, viewAdapter.getSelection().getIds())
-    }
-
-    private fun handleActionItemClick(actionId: Int, actionMode: ActionMode?, ids: Set<Long>) {
-        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, actionId, ids)
+    private fun handleActionItemClick(ids: Set<Long>, itemId: Int, item: MenuItem? = null) {
+        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, ids, itemId, item)
 
         if (ids.isEmpty()) {
             Log.e(TAG, "Cannot handle action when there are no items selected")
-            actionMode?.finish()
+            viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             return
         }
 
-        when (actionId) {
-            R.id.quick_bar_open -> {
-                openNote(ids.first())
-            }
-
-            R.id.quick_bar_new_above,
-            R.id.bottom_action_bar_new_above -> {
+        when (itemId) {
+            R.id.note_popup_new_above,
+            R.id.new_note_above -> {
                 newNoteRelativeToSelection(Place.ABOVE, ids.first())
-                actionMode?.finish()
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             }
 
-            R.id.quick_bar_new_under,
-            R.id.bottom_action_bar_new_under -> {
+            R.id.note_popup_new_under,
+            R.id.new_note_under -> {
                 newNoteRelativeToSelection(Place.UNDER, ids.first())
-                actionMode?.finish()
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             }
 
-            R.id.quick_bar_new_below,
-            R.id.bottom_action_bar_new_below -> {
+            R.id.note_popup_new_below,
+            R.id.new_note_below -> {
                 newNoteRelativeToSelection(Place.BELOW, ids.first())
-                actionMode?.finish()
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             }
 
-            R.id.book_cab_move -> {
-                actionMode?.tag = "M"
-                actionMode?.invalidate()
+            R.id.move -> {
+                viewModel.appBar.toMode(APP_BAR_SELECTION_MOVE_MODE)
             }
 
             in scheduledTimeButtonIds(),
             in deadlineTimeButtonIds() ->
-                displayTimestampDialog(actionId, ids)
+                displayTimestampDialog(itemId, ids)
 
-            R.id.quick_bar_clock_in ->
-                sharedMainActivityViewModel.clockingUpdateRequest(ids, 0)
-            R.id.quick_bar_clock_out ->
-                sharedMainActivityViewModel.clockingUpdateRequest(ids, 1)
-            R.id.quick_bar_clock_cancel ->
-                sharedMainActivityViewModel.clockingUpdateRequest(ids, 2)
-
-            R.id.quick_bar_delete,
-            R.id.book_cab_delete_note -> {
+            R.id.note_popup_delete,
+            R.id.delete_note -> {
                 delete(ids)
 
                 // TODO: Wait for user confirmation (dialog close) before doing this
-                actionMode?.finish()
+                // TODO: Don't do it if canceled
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             }
 
-            R.id.book_cab_cut -> {
+            R.id.cut -> {
                 listener?.onNotesCutRequest(mBookId, ids)
-                actionMode?.finish()
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             }
 
-            R.id.book_cab_copy -> {
+            R.id.copy -> {
                 listener?.onNotesCopyRequest(mBookId, ids)
-                actionMode?.finish()
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             }
 
-            R.id.book_cab_paste_above -> {
+            R.id.paste_above -> {
                 pasteNotes(Place.ABOVE, ids.first())
-                actionMode?.finish()
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             }
 
-            R.id.quick_bar_refile,
-            R.id.book_cab_refile ->
+            R.id.note_popup_refile,
+            R.id.refile ->
                 viewModel.refile(ids)
 
-            R.id.book_cab_paste_under -> {
+            R.id.paste_under -> {
                 pasteNotes(Place.UNDER, ids.first())
-                actionMode?.finish()
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             }
 
-            R.id.book_cab_paste_below -> {
+            R.id.paste_below -> {
                 pasteNotes(Place.BELOW, ids.first())
-                actionMode?.finish()
+                viewModel.appBar.toMode(APP_BAR_DEFAULT_MODE)
             }
 
             R.id.notes_action_move_up ->
@@ -711,20 +711,67 @@ class BookFragment :
             R.id.notes_action_move_right ->
                 listener?.onNotesDemoteRequest(ids)
 
-            R.id.quick_bar_state,
-            R.id.bottom_action_bar_state ->
+            R.id.note_popup_set_state,
+            R.id.state ->
                 listener?.let {
                     openNoteStateDialog(it, ids, null)
                 }
 
-            R.id.quick_bar_done,
-            R.id.bottom_action_bar_done -> {
+            R.id.note_popup_toggle_state,
+            R.id.toggle_state -> {
                 listener?.onStateToggleRequest(ids)
             }
 
-            R.id.quick_bar_focus,
-            R.id.bottom_action_bar_focus ->
+            R.id.note_popup_clock_in,
+            R.id.clock_in -> {
+                listener?.onClockIn(ids)
+            }
+
+            R.id.note_popup_clock_out,
+            R.id.clock_out -> {
+                listener?.onClockOut(ids)
+            }
+
+            R.id.note_popup_clock_cancel,
+            R.id.clock_cancel -> {
+                listener?.onClockCancel(ids)
+            }
+
+            R.id.note_popup_focus,
+            R.id.focus ->
                 listener?.onNoteFocusInBookRequest(ids.first())
+        }
+    }
+
+    private fun handleActionItemClick(itemId: Int, item: MenuItem? = null) {
+        if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, itemId, item)
+
+        when (itemId) {
+            R.id.books_options_menu_item_cycle_visibility -> {
+                viewModel.cycleVisibility()
+            }
+
+            R.id.book_actions_paste -> {
+                pasteNotes(Place.UNDER, 0)
+            }
+
+            R.id.books_options_menu_book_preface -> {
+                onPrefaceClick()
+            }
+
+            R.id.keep_screen_on -> {
+                if (item != null) {
+                    dialog = ActivityUtils.keepScreenOnToggle(activity, item)
+                }
+            }
+
+            R.id.sync -> {
+                SyncRunner.startSync()
+            }
+
+            R.id.activity_action_settings -> {
+                startActivity(Intent(context, SettingsActivity::class.java))
+            }
         }
     }
 
@@ -746,7 +793,6 @@ class BookFragment :
     }
 
     companion object {
-
         private val TAG = BookFragment::class.java.name
 
         /** Name used for [android.app.FragmentManager].  */
@@ -756,9 +802,6 @@ class BookFragment :
         /* Arguments. */
         private const val ARG_BOOK_ID = "bookId"
         private const val ARG_NOTE_ID = "noteId"
-
-        private val ITEMS_HIDDEN_ON_MULTIPLE_SELECTED_NOTES = intArrayOf(
-                R.id.book_cab_paste)
 
         /**
          * @param bookId Book ID
